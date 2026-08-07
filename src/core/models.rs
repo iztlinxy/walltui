@@ -16,6 +16,7 @@ pub struct Wallpaper {
     pub avg_color: Option<String>,
     pub attribution: Option<String>,
     pub file_type: Option<String>,
+    pub web_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +150,7 @@ mod tests {
             avg_color: Some("#ff0000".to_string()),
             attribution: None,
             file_type: None,
+            web_url: None,
         }
     }
 

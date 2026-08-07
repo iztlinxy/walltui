@@ -106,7 +106,7 @@ impl WallhavenWallpaper {
         Wallpaper {
             id: self.id.clone(),
             provider: Provider::Wallhaven,
-            url: self.url.clone(),
+            url: self.path.clone(),
             thumb_url: self.thumbs.large.clone(),
             title: format!("Wallhaven {}", self.id),
             photographer: "Unknown".to_string(),
@@ -115,6 +115,7 @@ impl WallhavenWallpaper {
             avg_color: self.colors.first().cloned(),
             attribution: None,
             file_type: if self.file_type.is_empty() { None } else { Some(self.file_type.clone()) },
+            web_url: Some(self.url.clone()),
         }
     }
 }
