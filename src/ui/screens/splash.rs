@@ -26,25 +26,27 @@ impl<'a> SplashScreen<'a> {
             ])
             .split(area);
 
-        let ascii_logo = r#"
- __        __   _   _           _____  _    _ _____ 
- \ \      / /__| | | |_      __  ( _ )| |  | |_   _|
-  \ \ /\ / / _ \ | | \ \ /\ / / / _ \| |  | | | |  
-   \ V  V /  __/ |_| |\ V  V / | (_) | |__| |_| |_ 
-    \_/\_/ \___|\___/  \_/\_/   \___/ \____/|_____|
-        "#;
+        let ascii_logo: Vec<Line> = vec![
+            Line::from(r"  _    _   ___   _     _     _____  _   _  _____      ").centered(),
+            Line::from(r" | |  | | / _ \\| |   | |   |_   _|| | | ||_   _|     ").centered(),
+            Line::from(r" | |/\| || |_| || |   | |     | |  | | | |  | |       ").centered(),
+            Line::from(r" |  /\  ||  _  || |__ | |__   | |  | |_| | _| |_      ").centered(),
+            Line::from(r" \_/ \_/|_| |_||____||____|  |_|  |_____| |____|     ").centered(),
+        ];
 
-        let splash = Paragraph::new(vec![
-            Line::from(ascii_logo).centered(),
-            Line::from(""),
+        let mut lines = ascii_logo;
+        lines.push(Line::from(""));
+        lines.push(
             Line::from(Span::styled(
                 "Terminal Wallpaper Manager",
                 Style::default().fg(self.theme.primary).bold(),
             ))
             .centered(),
-            Line::from(""),
-            Line::from(Span::raw("v0.1.0")).centered(),
-            Line::from(""),
+        );
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::raw("v0.1.0")).centered());
+        lines.push(Line::from(""));
+        lines.push(
             Line::from(vec![
                 Span::styled("s", Style::default().fg(self.theme.secondary).bold()),
                 Span::raw(" Search  "),
@@ -54,12 +56,15 @@ impl<'a> SplashScreen<'a> {
                 Span::raw(" Quit"),
             ])
             .centered(),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(self.theme.primary)),
         );
+
+        let splash = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            )
+            .alignment(ratatui::layout::Alignment::Center);
 
         frame.render_widget(splash, chunks[0]);
 
