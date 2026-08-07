@@ -20,7 +20,7 @@ pub struct SearchScreen<'a> {
     wallpapers: &'a [Wallpaper],
     active_provider: Provider,
     search_page: u32,
-    thumbnail_lines: &'a [String],
+    thumbnail_lines: &'a [Line<'static>],
     theme: &'a Theme,
 }
 
@@ -34,7 +34,7 @@ impl<'a> SearchScreen<'a> {
         wallpapers: &'a [Wallpaper],
         active_provider: Provider,
         search_page: u32,
-        thumbnail_lines: &'a [String],
+        thumbnail_lines: &'a [Line<'static>],
         theme: &'a Theme,
     ) -> Self {
         Self {

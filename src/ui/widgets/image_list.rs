@@ -12,7 +12,7 @@ use crate::ui::theme::Theme;
 pub struct ImageList<'a> {
     wallpapers: &'a [Wallpaper],
     selected: usize,
-    thumbnail_lines: &'a [String],
+    thumbnail_lines: &'a [Line<'static>],
     theme: &'a Theme,
 }
 
@@ -20,7 +20,7 @@ impl<'a> ImageList<'a> {
     pub fn new(
         wallpapers: &'a [Wallpaper],
         selected: usize,
-        thumbnail_lines: &'a [String],
+        thumbnail_lines: &'a [Line<'static>],
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -96,34 +96,17 @@ impl<'a> ImageList<'a> {
     }
 
     fn render_thumbnail(&self, frame: &mut Frame, area: Rect) {
-        let mut lines: Vec<Line> = vec![
-            Line::from(Span::styled(
-                "Thumbnail",
-                Style::default()
-                    .fg(self.theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ))
-            .alignment(Alignment::Center),
-        ];
-
-        lines.push(Line::from(""));
-
-        if self.thumbnail_lines.is_empty() || self.thumbnail_lines == ["Loading..."] {
-            lines.push(
+        let lines: Vec<Line> = if self.thumbnail_lines.is_empty() {
+            vec![
                 Line::from(Span::styled(
                     "Loading...",
                     Style::default().fg(Color::DarkGray),
                 ))
                 .alignment(Alignment::Center),
-            );
+            ]
         } else {
-            for line in self.thumbnail_lines {
-                lines.push(Line::from(Span::styled(
-                    line.as_str(),
-                    Style::default().fg(Color::Green),
-                )));
-            }
-        }
+            self.thumbnail_lines.to_vec()
+        };
 
         let thumb = Paragraph::new(lines).block(
             Block::default()
@@ -131,7 +114,6 @@ impl<'a> ImageList<'a> {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(self.theme.primary)),
         );
-
         frame.render_widget(thumb, area);
     }
 }

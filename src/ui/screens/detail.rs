@@ -1,6 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
+    text::Line,
 };
 
 use crate::core::models::Wallpaper;
@@ -11,11 +12,11 @@ use crate::ui::widgets::image_card::ImageCard;
 pub struct DetailScreen<'a> {
     wallpaper: &'a Wallpaper,
     theme: &'a Theme,
-    thumbnail_lines: &'a [String],
+    thumbnail_lines: &'a [Line<'static>],
 }
 
 impl<'a> DetailScreen<'a> {
-    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [String]) -> Self {
+    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [Line<'static>]) -> Self {
         Self {
             wallpaper,
             theme,

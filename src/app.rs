@@ -1,8 +1,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use image::GenericImageView;
-use ratatui::Frame;
+use image::{DynamicImage, GenericImageView};
+use ratatui::{
+    Frame,
+    style::{Color, Style},
+    text::{Line, Span},
+};
 use tokio::sync::mpsc;
 
 use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, generate_filename};
@@ -41,9 +45,9 @@ pub struct App {
     pub download_manager: Arc<DownloadManager>,
     pub download_rx: mpsc::Receiver<DownloadEvent>,
     pub notification: Option<String>,
-    pub thumbnail_lines: Vec<String>,
-    pub thumbnail_rx: mpsc::Receiver<Vec<String>>,
-    pub thumbnail_tx: mpsc::Sender<Vec<String>>,
+    pub thumbnail_lines: Vec<Line<'static>>,
+    pub thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
+    pub thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
     pub thumbnail_loading_id: Option<String>,
 }
 
@@ -83,7 +87,7 @@ impl App {
             download_manager: manager,
             download_rx: rx,
             notification: None,
-            thumbnail_lines: vec!["Loading...".to_string()],
+            thumbnail_lines: Vec::new(),
             thumbnail_rx: thumb_rx,
             thumbnail_tx: thumb_tx,
             thumbnail_loading_id: None,
@@ -109,8 +113,12 @@ impl App {
 
         self.download_tasks = self.download_manager.tasks().await;
 
-        while let Ok(lines) = self.thumbnail_rx.try_recv() {
-            self.thumbnail_lines = lines;
+        while let Ok(img) = self.thumbnail_rx.try_recv() {
+            if let Some(img) = img {
+                self.thumbnail_lines = image_to_lines(&img, 42, 18);
+            } else {
+                self.thumbnail_lines = Vec::new();
+            }
         }
 
         if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
@@ -118,7 +126,7 @@ impl App {
             && self.thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
         {
             self.thumbnail_loading_id = Some(wallpaper.id.clone());
-            self.thumbnail_lines = vec!["Loading...".to_string()];
+            self.thumbnail_lines = Vec::new();
             let tx = self.thumbnail_tx.clone();
             let wallpaper = wallpaper.clone();
             tokio::spawn(async move {
@@ -349,64 +357,42 @@ impl App {
     }
 }
 
-async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Vec<String>>) {
-    let width = 40;
-    let height = 15;
-
+async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Option<DynamicImage>>) {
     let client = reqwest::Client::new();
-    let lines = match client.get(&wallpaper.thumb_url).send().await {
+    let img = match client.get(&wallpaper.thumb_url).send().await {
         Ok(response) => {
             if response.status().is_success() {
                 match response.bytes().await {
-                    Ok(bytes) => {
-                        let temp_dir = std::env::temp_dir();
-                        let filename = format!("walltui_thumb_{}.tmp", wallpaper.id);
-                        let path = temp_dir.join(&filename);
-
-                        if tokio::fs::write(&path, &bytes).await.is_ok() {
-                            if let Ok(img) = image::open(&path) {
-                                let resized = img.resize_exact(
-                                    width as u32,
-                                    height as u32,
-                                    image::imageops::FilterType::Nearest,
-                                );
-                                let mut ascii_lines = Vec::new();
-                                for y in 0..height {
-                                    let mut line = String::new();
-                                    for x in 0..width {
-                                        let pixel = resized.get_pixel(x as u32, y as u32);
-                                        let brightness =
-                                            (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32)
-                                                / 3;
-                                        let ch = match brightness {
-                                            0..=63 => ' ',
-                                            64..=127 => '.',
-                                            128..=191 => ':',
-                                            192..=255 => '#',
-                                            _ => ' ',
-                                        };
-                                        line.push(ch);
-                                    }
-                                    ascii_lines.push(line);
-                                }
-                                ascii_lines
-                            } else {
-                                vec!["Failed to decode image".to_string()]
-                            }
-                        } else {
-                            vec!["Failed to save thumbnail".to_string()]
-                        }
-                    }
-                    Err(_) => vec!["Failed to read thumbnail".to_string()],
+                    Ok(bytes) => image::load_from_memory(&bytes).ok(),
+                    Err(_) => None,
                 }
             } else {
-                vec![format!("HTTP {}", response.status())]
+                None
             }
         }
-        Err(_) => vec!["Failed to download thumbnail".to_string()],
+        Err(_) => None,
     };
 
-    let _ = tx.send(lines).await;
+    let _ = tx.send(img).await;
+}
+
+fn image_to_lines(img: &DynamicImage, width: u32, height: u32) -> Vec<Line<'static>> {
+    let resized = img.resize_exact(width, height * 2, image::imageops::FilterType::Lanczos3);
+    let mut lines = Vec::with_capacity(height as usize);
+
+    for y in 0..height {
+        let mut spans = Vec::with_capacity(width as usize);
+        for x in 0..width {
+            let top = resized.get_pixel(x, y * 2);
+            let bottom = resized.get_pixel(x, y * 2 + 1);
+            let fg = Color::Rgb(top[0], top[1], top[2]);
+            let bg = Color::Rgb(bottom[0], bottom[1], bottom[2]);
+            spans.push(Span::styled("▀", Style::default().fg(fg).bg(bg)));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    lines
 }
 
 impl Default for App {

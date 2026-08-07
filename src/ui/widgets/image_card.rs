@@ -12,11 +12,11 @@ use crate::ui::theme::Theme;
 pub struct ImageCard<'a> {
     wallpaper: &'a Wallpaper,
     theme: &'a Theme,
-    thumbnail_lines: &'a [String],
+    thumbnail_lines: &'a [Line<'static>],
 }
 
 impl<'a> ImageCard<'a> {
-    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [String]) -> Self {
+    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [Line<'static>]) -> Self {
         Self {
             wallpaper,
             theme,
@@ -157,34 +157,17 @@ impl<'a> ImageCard<'a> {
     }
 
     fn render_preview(&self, frame: &mut Frame, area: Rect) {
-        let mut lines: Vec<Line> = vec![
-            Line::from(Span::styled(
-                "Thumbnail",
-                Style::default()
-                    .fg(self.theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ))
-            .centered(),
-        ];
-
-        lines.push(Line::from(""));
-
-        if self.thumbnail_lines.is_empty() {
-            lines.push(
+        let lines: Vec<Line> = if self.thumbnail_lines.is_empty() {
+            vec![
                 Line::from(Span::styled(
                     "Loading...",
                     Style::default().fg(Color::DarkGray),
                 ))
                 .centered(),
-            );
+            ]
         } else {
-            for line in self.thumbnail_lines {
-                lines.push(Line::from(Span::styled(
-                    line.as_str(),
-                    Style::default().fg(Color::Green),
-                )));
-            }
-        }
+            self.thumbnail_lines.to_vec()
+        };
 
         let preview = Paragraph::new(lines).block(
             Block::default()
@@ -192,7 +175,6 @@ impl<'a> ImageCard<'a> {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(self.theme.primary)),
         );
-
         frame.render_widget(preview, area);
     }
 }
