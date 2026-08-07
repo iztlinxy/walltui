@@ -19,19 +19,15 @@ pub struct Wallpaper {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provider {
-    Unsplash,
-    Pexels,
-    Pixabay,
-    Commons,
+    Wallhaven,
+    Pixiv,
 }
 
 impl fmt::Display for Provider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Provider::Unsplash => write!(f, "Unsplash"),
-            Provider::Pexels => write!(f, "Pexels"),
-            Provider::Pixabay => write!(f, "Pixabay"),
-            Provider::Commons => write!(f, "Commons"),
+            Provider::Wallhaven => write!(f, "Wallhaven"),
+            Provider::Pixiv => write!(f, "Pixiv"),
         }
     }
 }
@@ -41,10 +37,8 @@ impl FromStr for Provider {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "unsplash" => Ok(Provider::Unsplash),
-            "pexels" => Ok(Provider::Pexels),
-            "pixabay" => Ok(Provider::Pixabay),
-            "commons" => Ok(Provider::Commons),
+            "wallhaven" => Ok(Provider::Wallhaven),
+            "pixiv" => Ok(Provider::Pixiv),
             other => Err(format!("unknown provider: {other}")),
         }
     }
@@ -134,5 +128,80 @@ impl SearchQueryBuilder {
             orientation: self.orientation,
             color: self.color,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_wallpaper() -> Wallpaper {
+        Wallpaper {
+            id: "abc-123".to_string(),
+            provider: Provider::Wallhaven,
+            url: "https://example.com/full.jpg".to_string(),
+            thumb_url: "https://example.com/thumb.jpg".to_string(),
+            title: "Test Image".to_string(),
+            photographer: "Test User".to_string(),
+            width: Some(1920),
+            height: Some(1080),
+            avg_color: Some("#ff0000".to_string()),
+            attribution: None,
+        }
+    }
+
+    #[test]
+    fn wallpaper_serialization_round_trip() {
+        let wallpaper = sample_wallpaper();
+        let json = serde_json::to_string(&wallpaper).unwrap();
+        let deserialized: Wallpaper = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, wallpaper.id);
+        assert_eq!(deserialized.provider, wallpaper.provider);
+        assert_eq!(deserialized.url, wallpaper.url);
+        assert_eq!(deserialized.photographer, wallpaper.photographer);
+        assert_eq!(deserialized.width, wallpaper.width);
+        assert_eq!(deserialized.height, wallpaper.height);
+    }
+
+    #[test]
+    fn search_query_builder_defaults() {
+        let query = SearchQuery::builder("nature").build();
+        assert_eq!(query.query, "nature");
+        assert_eq!(query.page, 1);
+        assert_eq!(query.per_page, 20);
+        assert!(query.provider.is_none());
+        assert!(query.orientation.is_none());
+        assert!(query.color.is_none());
+    }
+
+    #[test]
+    fn search_query_builder_with_all_fields() {
+        let query = SearchQuery::builder("city")
+            .provider(Provider::Wallhaven)
+            .page(2)
+            .per_page(50)
+            .orientation(Orientation::Landscape)
+            .color("black")
+            .build();
+
+        assert_eq!(query.query, "city");
+        assert_eq!(query.provider, Some(Provider::Wallhaven));
+        assert_eq!(query.page, 2);
+        assert_eq!(query.per_page, 50);
+        assert_eq!(query.orientation, Some(Orientation::Landscape));
+        assert_eq!(query.color, Some("black".to_string()));
+    }
+
+    #[test]
+    fn provider_display() {
+        assert_eq!(format!("{}", Provider::Wallhaven), "Wallhaven");
+        assert_eq!(format!("{}", Provider::Pixiv), "Pixiv");
+    }
+
+    #[test]
+    fn provider_from_str() {
+        assert_eq!("wallhaven".parse::<Provider>().unwrap(), Provider::Wallhaven);
+        assert_eq!("PIXIV".parse::<Provider>().unwrap(), Provider::Pixiv);
+        assert!("unknown".parse::<Provider>().is_err());
     }
 }
