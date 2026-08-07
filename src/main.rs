@@ -1,10 +1,12 @@
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
-use tracing::{info, warn};
+use tracing::info;
 
 use walltui::app::App;
+use walltui::core::models::Provider;
+use walltui::ui::screens::Screen;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -67,10 +69,127 @@ fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
     if let Event::Key(key) = event {
         if key.kind == KeyEventKind::Press {
             match key.code {
-                KeyCode::Char('q') | KeyCode::Char('Q') => app.quit(),
-                _ => warn!("unhandled key: {:?}", key.code),
+                KeyCode::Char('q') => app.quit(),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.quit(),
+                _ => handle_screen_event(app, key.code, key.modifiers)?,
             }
         }
     }
     Ok(())
+}
+
+fn handle_screen_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> color_eyre::Result<()> {
+    match app.current_screen {
+        Screen::Splash => handle_splash_event(app, key),
+        Screen::Search => handle_search_event(app, key, modifiers),
+        Screen::Detail => handle_detail_event(app, key),
+        Screen::Download => handle_download_event(app, key),
+        Screen::Config => handle_config_event(app, key, modifiers),
+    }
+    Ok(())
+}
+
+fn handle_splash_event(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Char('s') => app.navigate_to(Screen::Search),
+        KeyCode::Char('c') => app.navigate_to(Screen::Config),
+        _ => {}
+    }
+}
+
+fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) {
+    if app.search_focused {
+        match key {
+            KeyCode::Esc => {
+                app.search_focused = false;
+            }
+            KeyCode::Enter => {
+                app.search_focused = false;
+                info!("Search query: {}", app.search_query);
+            }
+            KeyCode::Backspace => {
+                app.handle_search_backspace();
+            }
+            KeyCode::Left => {
+                app.handle_search_left();
+            }
+            KeyCode::Right => {
+                app.handle_search_right();
+            }
+            KeyCode::Char(c) => {
+                app.handle_search_input(c);
+            }
+            _ => {}
+        }
+    } else {
+        match key {
+            KeyCode::Esc => app.go_back(),
+            KeyCode::Char('/') => {
+                app.search_focused = true;
+            }
+            KeyCode::Char('1') => app.switch_provider(Provider::Wallhaven),
+            KeyCode::Char('2') => app.switch_provider(Provider::Pixiv),
+            KeyCode::Up | KeyCode::Char('k') => app.move_selection_up(),
+            KeyCode::Down | KeyCode::Char('j') => app.move_selection_down(),
+            KeyCode::Enter => {
+                if !app.wallpapers.is_empty() {
+                    app.navigate_to(Screen::Detail);
+                }
+            }
+            KeyCode::Char('d') => {
+                app.navigate_to(Screen::Download);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn handle_detail_event(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc => app.go_back(),
+        KeyCode::Char('d') => {
+            info!("Download image: {}", app.selected_index);
+        }
+        KeyCode::Char('o') => {
+            info!("Open in browser");
+        }
+        _ => {}
+    }
+}
+
+fn handle_download_event(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc => app.go_back(),
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.selected_index > 0 {
+                app.selected_index -= 1;
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.selected_index + 1 < app.download_tasks.len() {
+                app.selected_index += 1;
+            }
+        }
+        KeyCode::Char('x') => {
+            info!("Cancel download");
+        }
+        KeyCode::Char('r') => {
+            info!("Retry download");
+        }
+        KeyCode::Char('c') => {
+            info!("Clear completed");
+        }
+        _ => {}
+    }
+}
+
+fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
+    match key {
+        KeyCode::Esc => app.go_back(),
+        KeyCode::Char('t') => app.toggle_theme(),
+        KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+            info!("Save config");
+        }
+        _ => {}
+    }
 }
