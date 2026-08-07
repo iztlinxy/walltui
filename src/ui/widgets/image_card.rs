@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::core::models::Wallpaper;
@@ -29,24 +29,43 @@ impl<'a> ImageCard<'a> {
         let color_info = w.avg_color.as_deref().unwrap_or("N/A");
 
         let lines = vec![
-            Line::from(Span::styled("Title: ", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                "Title: ",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from(w.title.as_str()),
             Line::from(""),
-            Line::from(Span::styled("Photographer: ", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                "Photographer: ",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from(w.photographer.as_str()),
             Line::from(""),
-            Line::from(Span::styled("Dimensions: ", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                "Dimensions: ",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from(dims),
             Line::from(""),
-            Line::from(Span::styled("Avg Color: ", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                "Avg Color: ",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from(color_info),
             Line::from(""),
-            Line::from(Span::styled("URL: ", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                "URL: ",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from(w.url.as_str()),
         ];
 
-        let card = Paragraph::new(lines)
-            .block(Block::default().title(" Image Detail ").borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+        let card = Paragraph::new(lines).block(
+            Block::default()
+                .title(" Image Detail ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
 
         frame.render_widget(card, area);
     }

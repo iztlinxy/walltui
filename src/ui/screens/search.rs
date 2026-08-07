@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::core::models::{Provider, Wallpaper};
@@ -61,7 +61,11 @@ impl<'a> SearchScreen<'a> {
                 "No results. Press / to search.",
                 Style::default().fg(self.theme.secondary),
             )))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            );
             frame.render_widget(empty, chunks[1]);
         } else {
             ImageList::new(self.wallpapers, self.selected, self.theme).render(frame, chunks[1]);

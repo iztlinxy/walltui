@@ -1,13 +1,13 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
-use crate::ui::theme::Theme;
 use crate::ui::screens::Screen;
+use crate::ui::theme::Theme;
 
 pub struct AppLayout<'a> {
     theme: &'a Theme,
@@ -37,9 +37,16 @@ impl<'a> AppLayout<'a> {
         let header = Paragraph::new(Line::from(vec![
             Span::styled(" WallTUI ", Style::default().fg(self.theme.primary).bold()),
             Span::raw(" | Provider: "),
-            Span::styled(self.active_provider, Style::default().fg(self.theme.secondary)),
+            Span::styled(
+                self.active_provider,
+                Style::default().fg(self.theme.secondary),
+            ),
         ]))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
         frame.render_widget(header, chunks[0]);
 
         let screen_name = match self.active_screen {
@@ -57,7 +64,11 @@ impl<'a> AppLayout<'a> {
             Span::raw(" | "),
             Span::styled(" q quit ", Style::default().fg(self.theme.error)),
         ]))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
         frame.render_widget(footer, chunks[2]);
 
         chunks[1]

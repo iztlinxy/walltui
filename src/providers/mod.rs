@@ -18,10 +18,7 @@ pub trait ProviderAdapter: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-pub fn create_provider(
-    provider: Provider,
-    api_key: Option<String>,
-) -> Box<dyn ProviderAdapter> {
+pub fn create_provider(provider: Provider, api_key: Option<String>) -> Box<dyn ProviderAdapter> {
     match provider {
         Provider::Wallhaven => Box::new(wallhaven::WallhavenAdapter::new(api_key)),
         Provider::Pixiv => Box::new(pixiv::PixivAdapter::new(api_key)),

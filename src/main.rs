@@ -55,7 +55,7 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
             _ = tick_rate.tick() => {
                 app.tick().await;
             }
-            result = tokio::task::spawn_blocking(|| event::read()) => {
+            result = tokio::task::spawn_blocking(event::read) => {
                 let event = result??;
                 handle_event(&mut app, event).await?;
             }
@@ -66,19 +66,23 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
 }
 
 async fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
-    if let Event::Key(key) = event {
-        if key.kind == KeyEventKind::Press {
-            match key.code {
-                KeyCode::Char('q') => app.quit(),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.quit(),
-                _ => handle_screen_event(app, key.code, key.modifiers).await?,
-            }
+    if let Event::Key(key) = event
+        && key.kind == KeyEventKind::Press
+    {
+        match key.code {
+            KeyCode::Char('q') => app.quit(),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.quit(),
+            _ => handle_screen_event(app, key.code, key.modifiers).await?,
         }
     }
     Ok(())
 }
 
-async fn handle_screen_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> color_eyre::Result<()> {
+async fn handle_screen_event(
+    app: &mut App,
+    key: KeyCode,
+    modifiers: KeyModifiers,
+) -> color_eyre::Result<()> {
     match app.current_screen {
         Screen::Splash => handle_splash_event(app, key),
         Screen::Search => handle_search_event(app, key, modifiers),

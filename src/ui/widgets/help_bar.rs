@@ -1,8 +1,8 @@
 use ratatui::{
-    style::{Style},
+    Frame,
+    style::Style,
     text::{Line, Span},
     widgets::Paragraph,
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -24,7 +24,10 @@ impl<'a> HelpBar<'a> {
             .enumerate()
             .flat_map(|(i, (key, desc))| {
                 let mut items = vec![
-                    Span::styled(format!(" {key} "), Style::default().fg(self.theme.secondary).bold()),
+                    Span::styled(
+                        format!(" {key} "),
+                        Style::default().fg(self.theme.secondary).bold(),
+                    ),
                     Span::raw(*desc),
                 ];
                 if i < self.shortcuts.len() - 1 {

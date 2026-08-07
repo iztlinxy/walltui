@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
 
 use crate::core::download::{DownloadStatus, DownloadTask};
@@ -18,7 +18,11 @@ pub struct DownloadScreen<'a> {
 
 impl<'a> DownloadScreen<'a> {
     pub fn new(tasks: &'a [DownloadTask], selected: usize, theme: &'a Theme) -> Self {
-        Self { tasks, selected, theme }
+        Self {
+            tasks,
+            selected,
+            theme,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -32,7 +36,11 @@ impl<'a> DownloadScreen<'a> {
                 "No downloads. Press 'd' on an image to start downloading.",
                 Style::default().fg(self.theme.secondary),
             )))
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            );
             frame.render_widget(empty, chunks[0]);
         } else {
             let items: Vec<ListItem> = self
@@ -59,10 +67,20 @@ impl<'a> DownloadScreen<'a> {
                 })
                 .collect();
 
-            let mut state = ratatui::widgets::ListState::default().with_selected(Some(self.selected));
+            let mut state =
+                ratatui::widgets::ListState::default().with_selected(Some(self.selected));
             let list = List::new(items)
-                .block(Block::default().title(" Downloads ").borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)))
-                .highlight_style(Style::default().bg(self.theme.primary).fg(self.theme.background))
+                .block(
+                    Block::default()
+                        .title(" Downloads ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(self.theme.primary)),
+                )
+                .highlight_style(
+                    Style::default()
+                        .bg(self.theme.primary)
+                        .fg(self.theme.background),
+                )
                 .highlight_symbol("▶ ");
 
             frame.render_stateful_widget(list, chunks[0], &mut state);

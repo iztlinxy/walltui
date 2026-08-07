@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -37,7 +37,11 @@ impl<'a> SplashScreen<'a> {
         let splash = Paragraph::new(vec![
             Line::from(ascii_logo).centered(),
             Line::from(""),
-            Line::from(Span::styled("Terminal Wallpaper Manager", Style::default().fg(self.theme.primary).bold())).centered(),
+            Line::from(Span::styled(
+                "Terminal Wallpaper Manager",
+                Style::default().fg(self.theme.primary).bold(),
+            ))
+            .centered(),
             Line::from(""),
             Line::from(Span::raw("v0.1.0")).centered(),
             Line::from(""),
@@ -48,17 +52,19 @@ impl<'a> SplashScreen<'a> {
                 Span::raw(" Settings  "),
                 Span::styled("q", Style::default().fg(self.theme.error).bold()),
                 Span::raw(" Quit"),
-            ]).centered(),
+            ])
+            .centered(),
         ])
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
 
         frame.render_widget(splash, chunks[0]);
 
-        let help_shortcuts: Vec<(&str, &str)> = vec![
-            ("s", "Search"),
-            ("c", "Settings"),
-            ("q", "Quit"),
-        ];
+        let help_shortcuts: Vec<(&str, &str)> =
+            vec![("s", "Search"), ("c", "Settings"), ("q", "Quit")];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

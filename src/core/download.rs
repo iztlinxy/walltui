@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 use crate::core::models::Wallpaper;
 
@@ -34,7 +34,8 @@ impl DownloadTask {
     }
 
     pub fn request_cancel(&self) {
-        self.cancel_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.cancel_flag
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -75,12 +76,13 @@ impl DownloadManager {
 
     pub async fn retry(&self, index: usize) {
         let mut queue = self.queue.lock().await;
-        if let Some(task) = queue.get_mut(index) {
-            if matches!(task.status, DownloadStatus::Failed(_)) {
-                task.status = DownloadStatus::Queued;
-                task.progress = 0;
-                task.cancel_flag.store(false, std::sync::atomic::Ordering::SeqCst);
-            }
+        if let Some(task) = queue.get_mut(index)
+            && matches!(task.status, DownloadStatus::Failed(_))
+        {
+            task.status = DownloadStatus::Queued;
+            task.progress = 0;
+            task.cancel_flag
+                .store(false, std::sync::atomic::Ordering::SeqCst);
         }
     }
 
@@ -98,7 +100,9 @@ impl DownloadManager {
             loop {
                 let task_idx = {
                     let queue = manager.queue.lock().await;
-                    queue.iter().position(|t| t.status == DownloadStatus::Queued)
+                    queue
+                        .iter()
+                        .position(|t| t.status == DownloadStatus::Queued)
                 };
 
                 if let Some(idx) = task_idx {
@@ -110,10 +114,16 @@ impl DownloadManager {
                     let (wallpaper, save_path, cancel_flag) = {
                         let queue = manager.queue.lock().await;
                         let task = &queue[idx];
-                        (task.wallpaper.clone(), task.save_path.clone(), Arc::clone(&task.cancel_flag))
+                        (
+                            task.wallpaper.clone(),
+                            task.save_path.clone(),
+                            Arc::clone(&task.cancel_flag),
+                        )
                     };
 
-                    let result = download_with_progress(&wallpaper, &save_path, &cancel_flag, &tx, idx).await;
+                    let result =
+                        download_with_progress(&wallpaper, &save_path, &cancel_flag, &tx, idx)
+                            .await;
 
                     let mut queue = manager.queue.lock().await;
                     if let Some(task) = queue.get_mut(idx) {
@@ -199,10 +209,14 @@ async fn try_download(
     let mut downloaded: u64 = 0;
 
     if let Some(parent) = save_path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
-    let mut file = tokio::fs::File::create(save_path).await.map_err(|e| e.to_string())?;
+    let mut file = tokio::fs::File::create(save_path)
+        .await
+        .map_err(|e| e.to_string())?;
     use tokio::io::AsyncWriteExt;
 
     let mut stream = response.bytes_stream();
@@ -213,9 +227,13 @@ async fn try_download(
         file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
 
-        if total_size > 0 {
-            let progress = ((downloaded * 100) / total_size) as u8;
-            let _ = tx.send(DownloadEvent::Progress(task_idx, progress)).await;
+        if let Some(progress) = downloaded
+            .checked_mul(100)
+            .and_then(|v| v.checked_div(total_size))
+        {
+            let _ = tx
+                .send(DownloadEvent::Progress(task_idx, progress as u8))
+                .await;
         }
 
         if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {

@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Rect,
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -41,8 +41,12 @@ impl<'a> SearchBar<'a> {
             Span::raw(after),
         ]);
 
-        let search_bar = Paragraph::new(input_line)
-            .block(Block::default().title(" Search ").borders(Borders::ALL).border_style(border_style));
+        let search_bar = Paragraph::new(input_line).block(
+            Block::default()
+                .title(" Search ")
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        );
 
         frame.render_widget(search_bar, area);
     }

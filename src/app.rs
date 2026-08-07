@@ -8,12 +8,12 @@ use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, genera
 use crate::core::models::{Provider, Wallpaper};
 use crate::infrastructure::config_loader::AppConfig;
 use crate::ui::app_layout::AppLayout;
+use crate::ui::screens::Screen;
 use crate::ui::screens::config::ConfigScreen;
 use crate::ui::screens::detail::DetailScreen;
 use crate::ui::screens::download::DownloadScreen;
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
-use crate::ui::screens::Screen;
 use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,8 +47,16 @@ impl App {
         manager.start_worker(tx);
 
         let config = AppConfig::load();
-        let theme_mode = if config.theme == "light" { ThemeMode::Light } else { ThemeMode::Dark };
-        let theme = if config.theme == "light" { Theme::light() } else { Theme::dark() };
+        let theme_mode = if config.theme == "light" {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
+        };
+        let theme = if config.theme == "light" {
+            Theme::light()
+        } else {
+            Theme::dark()
+        };
 
         Self {
             should_quit: false,
@@ -119,7 +127,11 @@ impl App {
             }
         }
         let mut config = AppConfig::load();
-        config.theme = if self.theme_mode == ThemeMode::Light { "light".to_string() } else { "dark".to_string() };
+        config.theme = if self.theme_mode == ThemeMode::Light {
+            "light".to_string()
+        } else {
+            "dark".to_string()
+        };
         let _ = config.save();
     }
 
@@ -199,7 +211,12 @@ impl App {
     }
 
     pub fn draw(&self, frame: &mut Frame) {
-        let body_area = AppLayout::new(&self.theme, self.current_screen, &self.active_provider.to_string()).render(frame);
+        let body_area = AppLayout::new(
+            &self.theme,
+            self.current_screen,
+            &self.active_provider.to_string(),
+        )
+        .render(frame);
 
         match self.current_screen {
             Screen::Splash => {
@@ -223,7 +240,8 @@ impl App {
                 }
             }
             Screen::Download => {
-                DownloadScreen::new(&self.download_tasks, self.selected_index, &self.theme).render(frame, body_area);
+                DownloadScreen::new(&self.download_tasks, self.selected_index, &self.theme)
+                    .render(frame, body_area);
             }
             Screen::Config => {
                 ConfigScreen::new(&self.theme).render(frame, body_area);

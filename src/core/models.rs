@@ -200,7 +200,10 @@ mod tests {
 
     #[test]
     fn provider_from_str() {
-        assert_eq!("wallhaven".parse::<Provider>().unwrap(), Provider::Wallhaven);
+        assert_eq!(
+            "wallhaven".parse::<Provider>().unwrap(),
+            Provider::Wallhaven
+        );
         assert_eq!("PIXIV".parse::<Provider>().unwrap(), Provider::Pixiv);
         assert!("unknown".parse::<Provider>().is_err());
     }

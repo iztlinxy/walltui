@@ -125,24 +125,30 @@ impl ProviderAdapter for WallhavenAdapter {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Wallpaper>, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let url = self.build_search_url(query);
-            let response = self.client.get(&url).send().await.map_err(|e| {
-                AppError::Network(format!("Wallhaven request failed: {e}"))
-            })?;
+            let response = self
+                .client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| AppError::Network(format!("Wallhaven request failed: {e}")))?;
 
             let status = response.status();
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
                 return Err(AppError::Network("Rate limit exceeded".to_string()));
             }
             if status == reqwest::StatusCode::UNAUTHORIZED {
-                return Err(AppError::Network("Unauthorized: invalid API key".to_string()));
+                return Err(AppError::Network(
+                    "Unauthorized: invalid API key".to_string(),
+                ));
             }
             if !status.is_success() {
                 return Err(AppError::Network(format!("HTTP {status}")));
             }
 
-            let wh_response: WallhavenResponse = response.json().await.map_err(|e| {
-                AppError::Network(format!("Failed to parse response: {e}"))
-            })?;
+            let wh_response: WallhavenResponse = response
+                .json()
+                .await
+                .map_err(|e| AppError::Network(format!("Failed to parse response: {e}")))?;
 
             Ok(wh_response.data.iter().map(|w| w.to_wallpaper()).collect())
         })

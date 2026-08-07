@@ -1,6 +1,6 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
     Frame,
+    layout::{Constraint, Direction, Layout, Rect},
 };
 
 use crate::core::models::Wallpaper;
@@ -26,11 +26,8 @@ impl<'a> DetailScreen<'a> {
 
         ImageCard::new(self.wallpaper, self.theme).render(frame, chunks[0]);
 
-        let help_shortcuts: Vec<(&str, &str)> = vec![
-            ("d", "Download"),
-            ("o", "Open URL"),
-            ("Esc", "Back"),
-        ];
+        let help_shortcuts: Vec<(&str, &str)> =
+            vec![("d", "Download"), ("o", "Open URL"), ("Esc", "Back")];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

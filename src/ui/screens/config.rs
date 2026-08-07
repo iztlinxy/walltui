@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::ui::theme::Theme;
@@ -25,29 +25,42 @@ impl<'a> ConfigScreen<'a> {
             .split(area);
 
         let config_lines = vec![
-            Line::from(Span::styled(" Configuration", Style::default().fg(self.theme.primary).bold())),
+            Line::from(Span::styled(
+                " Configuration",
+                Style::default().fg(self.theme.primary).bold(),
+            )),
             Line::from(""),
-            Line::from(Span::styled(" API Keys:", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                " API Keys:",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from("   Wallhaven: (not set)"),
             Line::from("   Pixiv: (not set)"),
             Line::from(""),
-            Line::from(Span::styled(" Download Directory:", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                " Download Directory:",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from("   ~/Downloads/walltui"),
             Line::from(""),
-            Line::from(Span::styled(" Theme:", Style::default().fg(self.theme.secondary).bold())),
+            Line::from(Span::styled(
+                " Theme:",
+                Style::default().fg(self.theme.secondary).bold(),
+            )),
             Line::from("   Dark (press 't' to toggle)"),
         ];
 
-        let config = Paragraph::new(config_lines)
-            .block(Block::default().title(" Settings ").borders(Borders::ALL).border_style(Style::default().fg(self.theme.primary)));
+        let config = Paragraph::new(config_lines).block(
+            Block::default()
+                .title(" Settings ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
 
         frame.render_widget(config, chunks[0]);
 
-        let help_shortcuts: Vec<(&str, &str)> = vec![
-            ("t", "Toggle theme"),
-            ("Ctrl+S", "Save"),
-            ("Esc", "Back"),
-        ];
+        let help_shortcuts: Vec<(&str, &str)> =
+            vec![("t", "Toggle theme"), ("Ctrl+S", "Save"), ("Esc", "Back")];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

@@ -6,6 +6,7 @@ use crate::core::models::{SearchQuery, Wallpaper};
 use crate::providers::ProviderAdapter;
 
 pub struct PixivAdapter {
+    #[allow(dead_code)]
     api_key: Option<String>,
 }
 
@@ -21,12 +22,16 @@ impl ProviderAdapter for PixivAdapter {
         _query: &'a SearchQuery,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Wallpaper>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            Err(AppError::Provider("Pixiv adapter not yet implemented".to_string()))
+            Err(AppError::Provider(
+                "Pixiv adapter not yet implemented".to_string(),
+            ))
         })
     }
 
     fn download_url(&self, _wallpaper: &Wallpaper) -> Result<String, AppError> {
-        Err(AppError::Provider("Pixiv adapter not yet implemented".to_string()))
+        Err(AppError::Provider(
+            "Pixiv adapter not yet implemented".to_string(),
+        ))
     }
 
     fn name(&self) -> &'static str {
