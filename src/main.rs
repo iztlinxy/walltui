@@ -46,20 +46,16 @@ fn init_panic_hook() {
 
 async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     let mut app = App::new();
-    let mut tick_rate = tokio::time::interval(Duration::from_millis(250));
 
     while !app.should_quit {
         terminal.draw(|frame| app.draw(frame))?;
 
-        tokio::select! {
-            _ = tick_rate.tick() => {
-                app.tick().await;
-            }
-            result = tokio::task::spawn_blocking(event::read) => {
-                let event = result??;
-                handle_event(&mut app, event).await?;
-            }
+        if event::poll(Duration::from_millis(50))? {
+            let event = event::read()?;
+            handle_event(&mut app, event).await?;
         }
+
+        app.tick().await;
     }
 
     Ok(())
