@@ -5,8 +5,9 @@ use ratatui::Frame;
 use tokio::sync::mpsc;
 
 use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, generate_filename};
-use crate::core::models::{Provider, Wallpaper};
+use crate::core::models::{Provider, SearchQuery, Wallpaper};
 use crate::infrastructure::config_loader::AppConfig;
+use crate::providers::create_provider;
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::Screen;
 use crate::ui::screens::config::ConfigScreen;
@@ -177,6 +178,33 @@ impl App {
     pub fn move_selection_down(&mut self) {
         if self.selected_index + 1 < self.wallpapers.len() {
             self.selected_index += 1;
+        }
+    }
+
+    pub async fn execute_search(&mut self) {
+        if self.search_query.is_empty() {
+            return;
+        }
+
+        let config = AppConfig::load();
+        let api_key = match self.active_provider {
+            Provider::Wallhaven => config.wallhaven_api_key,
+            Provider::Pixiv => config.pixiv_api_key,
+        };
+
+        let adapter = create_provider(self.active_provider, api_key);
+        let query = SearchQuery::builder(&self.search_query).build();
+
+        match adapter.search(&query).await {
+            Ok(results) => {
+                self.wallpapers = results;
+                self.selected_index = 0;
+            }
+            Err(e) => {
+                tracing::error!("Search failed: {e}");
+                self.wallpapers.clear();
+                self.selected_index = 0;
+            }
         }
     }
 

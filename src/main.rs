@@ -81,7 +81,7 @@ async fn handle_screen_event(
 ) -> color_eyre::Result<()> {
     match app.current_screen {
         Screen::Splash => handle_splash_event(app, key),
-        Screen::Search => handle_search_event(app, key, modifiers),
+        Screen::Search => handle_search_event(app, key, modifiers).await,
         Screen::Detail => handle_detail_event(app, key),
         Screen::Download => handle_download_event(app, key).await,
         Screen::Config => handle_config_event(app, key, modifiers),
@@ -97,7 +97,7 @@ fn handle_splash_event(app: &mut App, key: KeyCode) {
     }
 }
 
-fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) {
+async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) {
     if app.search_focused {
         match key {
             KeyCode::Esc => {
@@ -105,7 +105,7 @@ fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) {
             }
             KeyCode::Enter => {
                 app.search_focused = false;
-                info!("Search query: {}", app.search_query);
+                app.execute_search().await;
             }
             KeyCode::Backspace => {
                 app.handle_search_backspace();
