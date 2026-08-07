@@ -12,14 +12,21 @@ use crate::ui::theme::Theme;
 pub struct ImageList<'a> {
     wallpapers: &'a [Wallpaper],
     selected: usize,
+    thumbnail_lines: &'a [String],
     theme: &'a Theme,
 }
 
 impl<'a> ImageList<'a> {
-    pub fn new(wallpapers: &'a [Wallpaper], selected: usize, theme: &'a Theme) -> Self {
+    pub fn new(
+        wallpapers: &'a [Wallpaper],
+        selected: usize,
+        thumbnail_lines: &'a [String],
+        theme: &'a Theme,
+    ) -> Self {
         Self {
             wallpapers,
             selected,
+            thumbnail_lines,
             theme,
         }
     }
@@ -89,42 +96,42 @@ impl<'a> ImageList<'a> {
     }
 
     fn render_thumbnail(&self, frame: &mut Frame, area: Rect) {
-        if let Some(wallpaper) = self.wallpapers.get(self.selected) {
-            let thumb_text = vec![
-                Line::from(""),
-                Line::from(Span::styled(
-                    "Selected Preview",
-                    Style::default()
-                        .fg(self.theme.primary)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .alignment(Alignment::Center),
-                Line::from(""),
-                Line::from(Span::styled(
-                    &wallpaper.thumb_url,
-                    Style::default().fg(Color::DarkGray),
-                ))
-                .alignment(Alignment::Center),
-                Line::from(""),
-                Line::from(Span::styled(
-                    format!(
-                        "{}x{}",
-                        wallpaper.width.unwrap_or(0),
-                        wallpaper.height.unwrap_or(0)
-                    ),
-                    Style::default().fg(Color::DarkGray),
-                ))
-                .alignment(Alignment::Center),
-            ];
+        let mut lines: Vec<Line> = vec![
+            Line::from(Span::styled(
+                "Thumbnail",
+                Style::default()
+                    .fg(self.theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Center),
+        ];
 
-            let thumb = Paragraph::new(thumb_text).block(
-                Block::default()
-                    .title(" Thumbnail ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(self.theme.primary)),
+        lines.push(Line::from(""));
+
+        if self.thumbnail_lines.is_empty() || self.thumbnail_lines == ["Loading..."] {
+            lines.push(
+                Line::from(Span::styled(
+                    "Loading...",
+                    Style::default().fg(Color::DarkGray),
+                ))
+                .alignment(Alignment::Center),
             );
-
-            frame.render_widget(thumb, area);
+        } else {
+            for line in self.thumbnail_lines {
+                lines.push(Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Green),
+                )));
+            }
         }
+
+        let thumb = Paragraph::new(lines).block(
+            Block::default()
+                .title(" Preview ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(self.theme.primary)),
+        );
+
+        frame.render_widget(thumb, area);
     }
 }

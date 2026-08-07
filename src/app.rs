@@ -41,12 +41,16 @@ pub struct App {
     pub download_manager: Arc<DownloadManager>,
     pub download_rx: mpsc::Receiver<DownloadEvent>,
     pub notification: Option<String>,
-    pub thumbnail_path: Option<std::path::PathBuf>,
+    pub thumbnail_lines: Vec<String>,
+    pub thumbnail_rx: mpsc::Receiver<Vec<String>>,
+    pub thumbnail_tx: mpsc::Sender<Vec<String>>,
+    pub thumbnail_loading_id: Option<String>,
 }
 
 impl App {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(100);
+        let (thumb_tx, thumb_rx) = mpsc::channel(10);
         let manager = Arc::new(DownloadManager::new());
         manager.start_worker(tx);
 
@@ -79,7 +83,10 @@ impl App {
             download_manager: manager,
             download_rx: rx,
             notification: None,
-            thumbnail_path: None,
+            thumbnail_lines: vec!["Loading...".to_string()],
+            thumbnail_rx: thumb_rx,
+            thumbnail_tx: thumb_tx,
+            thumbnail_loading_id: None,
         }
     }
 
@@ -102,16 +109,21 @@ impl App {
 
         self.download_tasks = self.download_manager.tasks().await;
 
-        if self.current_screen == Screen::Detail {
-            if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-                if let Some(path) = &self.thumbnail_path {
-                    if !path.to_string_lossy().contains(&wallpaper.id) {
-                        self.load_thumbnail().await;
-                    }
-                } else {
-                    self.load_thumbnail().await;
-                }
-            }
+        while let Ok(lines) = self.thumbnail_rx.try_recv() {
+            self.thumbnail_lines = lines;
+        }
+
+        if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
+            && let Some(wallpaper) = self.wallpapers.get(self.selected_index)
+            && self.thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
+        {
+            self.thumbnail_loading_id = Some(wallpaper.id.clone());
+            self.thumbnail_lines = vec!["Loading...".to_string()];
+            let tx = self.thumbnail_tx.clone();
+            let wallpaper = wallpaper.clone();
+            tokio::spawn(async move {
+                load_thumbnail_async(wallpaper, tx).await;
+            });
         }
     }
 
@@ -290,71 +302,8 @@ impl App {
     pub async fn clear_completed_downloads(&mut self) {
         self.download_manager.remove_completed().await;
     }
-
     pub fn clear_notification(&mut self) {
         self.notification = None;
-    }
-
-    pub async fn load_thumbnail(&mut self) {
-        if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-            let url = &wallpaper.thumb_url;
-            let client = reqwest::Client::new();
-
-            match client.get(url).send().await {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        match response.bytes().await {
-                            Ok(bytes) => {
-                                let temp_dir = std::env::temp_dir();
-                                let filename = format!("walltui_thumb_{}.tmp", wallpaper.id);
-                                let path = temp_dir.join(&filename);
-
-                                if let Ok(()) = tokio::fs::write(&path, &bytes).await {
-                                    self.thumbnail_path = Some(path);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to read thumbnail bytes: {e}");
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("Failed to download thumbnail: {e}");
-                }
-            }
-        }
-    }
-
-    pub fn get_thumbnail_ascii(&self, width: usize, height: usize) -> Vec<String> {
-        if let Some(path) = &self.thumbnail_path {
-            if let Ok(img) = image::open(path) {
-                let resized = img.resize_exact(
-                    width as u32,
-                    height as u32,
-                    image::imageops::FilterType::Nearest,
-                );
-                let mut lines = Vec::new();
-                for y in 0..height {
-                    let mut line = String::new();
-                    for x in 0..width {
-                        let pixel = resized.get_pixel(x as u32, y as u32);
-                        let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
-                        let ch = match brightness {
-                            0..=63 => ' ',
-                            64..=127 => '.',
-                            128..=191 => ':',
-                            192..=255 => '#',
-                            _ => ' ',
-                        };
-                        line.push(ch);
-                    }
-                    lines.push(line);
-                }
-                return lines;
-            }
-        }
-        vec![String::new(); height]
     }
 
     pub fn draw(&self, frame: &mut Frame) {
@@ -378,14 +327,14 @@ impl App {
                     &self.wallpapers,
                     self.active_provider,
                     self.search_page,
+                    &self.thumbnail_lines,
                     &self.theme,
                 )
                 .render(frame, body_area);
             }
             Screen::Detail => {
                 if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-                    let thumb_lines = self.get_thumbnail_ascii(40, 15);
-                    DetailScreen::new(wallpaper, &self.theme, &thumb_lines)
+                    DetailScreen::new(wallpaper, &self.theme, &self.thumbnail_lines)
                         .render(frame, body_area);
                 }
             }
@@ -398,6 +347,66 @@ impl App {
             }
         }
     }
+}
+
+async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Vec<String>>) {
+    let width = 40;
+    let height = 15;
+
+    let client = reqwest::Client::new();
+    let lines = match client.get(&wallpaper.thumb_url).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                match response.bytes().await {
+                    Ok(bytes) => {
+                        let temp_dir = std::env::temp_dir();
+                        let filename = format!("walltui_thumb_{}.tmp", wallpaper.id);
+                        let path = temp_dir.join(&filename);
+
+                        if tokio::fs::write(&path, &bytes).await.is_ok() {
+                            if let Ok(img) = image::open(&path) {
+                                let resized = img.resize_exact(
+                                    width as u32,
+                                    height as u32,
+                                    image::imageops::FilterType::Nearest,
+                                );
+                                let mut ascii_lines = Vec::new();
+                                for y in 0..height {
+                                    let mut line = String::new();
+                                    for x in 0..width {
+                                        let pixel = resized.get_pixel(x as u32, y as u32);
+                                        let brightness =
+                                            (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32)
+                                                / 3;
+                                        let ch = match brightness {
+                                            0..=63 => ' ',
+                                            64..=127 => '.',
+                                            128..=191 => ':',
+                                            192..=255 => '#',
+                                            _ => ' ',
+                                        };
+                                        line.push(ch);
+                                    }
+                                    ascii_lines.push(line);
+                                }
+                                ascii_lines
+                            } else {
+                                vec!["Failed to decode image".to_string()]
+                            }
+                        } else {
+                            vec!["Failed to save thumbnail".to_string()]
+                        }
+                    }
+                    Err(_) => vec!["Failed to read thumbnail".to_string()],
+                }
+            } else {
+                vec![format!("HTTP {}", response.status())]
+            }
+        }
+        Err(_) => vec!["Failed to download thumbnail".to_string()],
+    };
+
+    let _ = tx.send(lines).await;
 }
 
 impl Default for App {

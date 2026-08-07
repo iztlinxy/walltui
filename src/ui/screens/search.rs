@@ -20,10 +20,12 @@ pub struct SearchScreen<'a> {
     wallpapers: &'a [Wallpaper],
     active_provider: Provider,
     search_page: u32,
+    thumbnail_lines: &'a [String],
     theme: &'a Theme,
 }
 
 impl<'a> SearchScreen<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         query: &'a str,
         cursor_pos: usize,
@@ -32,6 +34,7 @@ impl<'a> SearchScreen<'a> {
         wallpapers: &'a [Wallpaper],
         active_provider: Provider,
         search_page: u32,
+        thumbnail_lines: &'a [String],
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -42,6 +45,7 @@ impl<'a> SearchScreen<'a> {
             wallpapers,
             active_provider,
             search_page,
+            thumbnail_lines,
             theme,
         }
     }
@@ -71,7 +75,13 @@ impl<'a> SearchScreen<'a> {
             );
             frame.render_widget(empty, chunks[1]);
         } else {
-            ImageList::new(self.wallpapers, self.selected, self.theme).render(frame, chunks[1]);
+            ImageList::new(
+                self.wallpapers,
+                self.selected,
+                self.thumbnail_lines,
+                self.theme,
+            )
+            .render(frame, chunks[1]);
         }
 
         let provider_label = self.active_provider.to_string();

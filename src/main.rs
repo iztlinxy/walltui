@@ -140,15 +140,11 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
             KeyCode::Char('d') => {
                 app.navigate_to(Screen::Download);
             }
-            KeyCode::Char('n') => {
-                if !app.search_query.is_empty() {
-                    app.search_next_page().await;
-                }
+            KeyCode::Char('n') if !app.search_query.is_empty() => {
+                app.search_next_page().await;
             }
-            KeyCode::Char('p') => {
-                if !app.search_query.is_empty() {
-                    app.search_prev_page().await;
-                }
+            KeyCode::Char('p') if !app.search_query.is_empty() => {
+                app.search_prev_page().await;
             }
             _ => {}
         }

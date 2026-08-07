@@ -1,2 +1,5 @@
 /target
-*md
+*.log
+*.tmp
+config.toml
+walltui.log
