@@ -72,3 +72,19 @@ impl Default for DownloadManager {
         Self::new()
     }
 }
+
+pub fn generate_filename(wallpaper: &Wallpaper) -> String {
+    let provider = wallpaper.provider.to_string().to_lowercase();
+    let id = sanitize_id(&wallpaper.id);
+    let dimensions = match (wallpaper.width, wallpaper.height) {
+        (Some(w), Some(h)) => format!("{w}x{h}"),
+        _ => "unknown".to_string(),
+    };
+    format!("{provider}_{id}_{dimensions}.jpg")
+}
+
+fn sanitize_id(id: &str) -> String {
+    id.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect()
+}
