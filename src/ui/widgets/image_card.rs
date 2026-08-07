@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -12,11 +12,16 @@ use crate::ui::theme::Theme;
 pub struct ImageCard<'a> {
     wallpaper: &'a Wallpaper,
     theme: &'a Theme,
+    thumbnail_lines: &'a [String],
 }
 
 impl<'a> ImageCard<'a> {
-    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme) -> Self {
-        Self { wallpaper, theme }
+    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [String]) -> Self {
+        Self {
+            wallpaper,
+            theme,
+            thumbnail_lines,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -34,12 +39,6 @@ impl<'a> ImageCard<'a> {
         let dims = match (w.width, w.height) {
             (Some(w), Some(h)) => format!("{w}x{h}"),
             _ => "Unknown".to_string(),
-        };
-
-        let file_size_str = if let Some(size) = w.avg_color.as_deref() {
-            format!("Avg Color: {size}")
-        } else {
-            String::new()
         };
 
         let views_str = w.views.map(|v| format!("Views: {v}")).unwrap_or_default();
@@ -113,7 +112,7 @@ impl<'a> ImageCard<'a> {
             lines.push(Line::from(favorites_str));
         }
 
-        if !file_size_str.is_empty() {
+        if let Some(color) = &w.avg_color {
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
                 "Avg Color: ",
@@ -121,7 +120,7 @@ impl<'a> ImageCard<'a> {
                     .fg(self.theme.primary)
                     .add_modifier(Modifier::BOLD),
             )));
-            lines.push(Line::from(file_size_str));
+            lines.push(Line::from(color.as_str()));
         }
 
         if let Some(web_url) = &w.web_url {
@@ -158,29 +157,36 @@ impl<'a> ImageCard<'a> {
     }
 
     fn render_preview(&self, frame: &mut Frame, area: Rect) {
-        let preview_text = vec![
-            Line::from(""),
+        let mut lines: Vec<Line> = vec![
             Line::from(Span::styled(
-                "Thumbnail Preview",
+                "Thumbnail",
                 Style::default()
                     .fg(self.theme.primary)
                     .add_modifier(Modifier::BOLD),
             ))
-            .alignment(Alignment::Center),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Image preview",
-                Style::default().fg(Color::DarkGray),
-            ))
-            .alignment(Alignment::Center),
-            Line::from(""),
-            Line::from(Span::styled(
-                &self.wallpaper.thumb_url,
-                Style::default().fg(Color::DarkGray),
-            )),
+            .centered(),
         ];
 
-        let preview = Paragraph::new(preview_text).block(
+        lines.push(Line::from(""));
+
+        if self.thumbnail_lines.is_empty() {
+            lines.push(
+                Line::from(Span::styled(
+                    "Loading...",
+                    Style::default().fg(Color::DarkGray),
+                ))
+                .centered(),
+            );
+        } else {
+            for line in self.thumbnail_lines {
+                lines.push(Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::Green),
+                )));
+            }
+        }
+
+        let preview = Paragraph::new(lines).block(
             Block::default()
                 .title(" Preview ")
                 .borders(Borders::ALL)

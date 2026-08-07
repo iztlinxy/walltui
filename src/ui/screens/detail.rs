@@ -11,11 +11,16 @@ use crate::ui::widgets::image_card::ImageCard;
 pub struct DetailScreen<'a> {
     wallpaper: &'a Wallpaper,
     theme: &'a Theme,
+    thumbnail_lines: &'a [String],
 }
 
 impl<'a> DetailScreen<'a> {
-    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme) -> Self {
-        Self { wallpaper, theme }
+    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [String]) -> Self {
+        Self {
+            wallpaper,
+            theme,
+            thumbnail_lines,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -24,7 +29,7 @@ impl<'a> DetailScreen<'a> {
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(area);
 
-        ImageCard::new(self.wallpaper, self.theme).render(frame, chunks[0]);
+        ImageCard::new(self.wallpaper, self.theme, self.thumbnail_lines).render(frame, chunks[0]);
 
         let help_shortcuts: Vec<(&str, &str)> =
             vec![("d", "Download"), ("o", "Open URL"), ("Esc", "Back")];

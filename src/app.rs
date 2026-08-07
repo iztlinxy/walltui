@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use image::GenericImageView;
 use ratatui::Frame;
 use tokio::sync::mpsc;
 
@@ -40,6 +41,7 @@ pub struct App {
     pub download_manager: Arc<DownloadManager>,
     pub download_rx: mpsc::Receiver<DownloadEvent>,
     pub notification: Option<String>,
+    pub thumbnail_path: Option<std::path::PathBuf>,
 }
 
 impl App {
@@ -77,6 +79,7 @@ impl App {
             download_manager: manager,
             download_rx: rx,
             notification: None,
+            thumbnail_path: None,
         }
     }
 
@@ -98,6 +101,18 @@ impl App {
         }
 
         self.download_tasks = self.download_manager.tasks().await;
+
+        if self.current_screen == Screen::Detail {
+            if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
+                if let Some(path) = &self.thumbnail_path {
+                    if !path.to_string_lossy().contains(&wallpaper.id) {
+                        self.load_thumbnail().await;
+                    }
+                } else {
+                    self.load_thumbnail().await;
+                }
+            }
+        }
     }
 
     pub fn quit(&mut self) {
@@ -187,7 +202,12 @@ impl App {
         if self.search_query.is_empty() {
             return;
         }
+        if let Err(e) = self.execute_search_inner().await {
+            tracing::error!("Search failed: {e}");
+        }
+    }
 
+    async fn execute_search_inner(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
             Provider::Wallhaven => config.wallhaven_api_key,
@@ -199,28 +219,35 @@ impl App {
             .page(self.search_page)
             .build();
 
-        match adapter.search(&query).await {
-            Ok(results) => {
-                self.wallpapers = results;
-                self.selected_index = 0;
-            }
-            Err(e) => {
-                tracing::error!("Search failed: {e}");
-                self.wallpapers.clear();
-                self.selected_index = 0;
-            }
-        }
+        let results = adapter.search(&query).await.map_err(|e| {
+            let msg = e.to_string();
+            self.wallpapers.clear();
+            self.selected_index = 0;
+            msg
+        })?;
+
+        self.wallpapers = results;
+        self.selected_index = 0;
+        Ok(())
     }
 
     pub async fn search_next_page(&mut self) {
+        if self.search_query.is_empty() {
+            return;
+        }
         self.search_page += 1;
-        self.execute_search().await;
+        if let Err(e) = self.execute_search_inner().await {
+            tracing::error!("Next page failed: {e}");
+        }
     }
 
     pub async fn search_prev_page(&mut self) {
-        if self.search_page > 1 {
-            self.search_page -= 1;
-            self.execute_search().await;
+        if self.search_query.is_empty() || self.search_page <= 1 {
+            return;
+        }
+        self.search_page -= 1;
+        if let Err(e) = self.execute_search_inner().await {
+            tracing::error!("Prev page failed: {e}");
         }
     }
 
@@ -268,6 +295,68 @@ impl App {
         self.notification = None;
     }
 
+    pub async fn load_thumbnail(&mut self) {
+        if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
+            let url = &wallpaper.thumb_url;
+            let client = reqwest::Client::new();
+
+            match client.get(url).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.bytes().await {
+                            Ok(bytes) => {
+                                let temp_dir = std::env::temp_dir();
+                                let filename = format!("walltui_thumb_{}.tmp", wallpaper.id);
+                                let path = temp_dir.join(&filename);
+
+                                if let Ok(()) = tokio::fs::write(&path, &bytes).await {
+                                    self.thumbnail_path = Some(path);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to read thumbnail bytes: {e}");
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to download thumbnail: {e}");
+                }
+            }
+        }
+    }
+
+    pub fn get_thumbnail_ascii(&self, width: usize, height: usize) -> Vec<String> {
+        if let Some(path) = &self.thumbnail_path {
+            if let Ok(img) = image::open(path) {
+                let resized = img.resize_exact(
+                    width as u32,
+                    height as u32,
+                    image::imageops::FilterType::Nearest,
+                );
+                let mut lines = Vec::new();
+                for y in 0..height {
+                    let mut line = String::new();
+                    for x in 0..width {
+                        let pixel = resized.get_pixel(x as u32, y as u32);
+                        let brightness = (pixel[0] as u32 + pixel[1] as u32 + pixel[2] as u32) / 3;
+                        let ch = match brightness {
+                            0..=63 => ' ',
+                            64..=127 => '.',
+                            128..=191 => ':',
+                            192..=255 => '#',
+                            _ => ' ',
+                        };
+                        line.push(ch);
+                    }
+                    lines.push(line);
+                }
+                return lines;
+            }
+        }
+        vec![String::new(); height]
+    }
+
     pub fn draw(&self, frame: &mut Frame) {
         let body_area = AppLayout::new(
             &self.theme,
@@ -295,7 +384,9 @@ impl App {
             }
             Screen::Detail => {
                 if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-                    DetailScreen::new(wallpaper, &self.theme).render(frame, body_area);
+                    let thumb_lines = self.get_thumbnail_ascii(40, 15);
+                    DetailScreen::new(wallpaper, &self.theme, &thumb_lines)
+                        .render(frame, body_area);
                 }
             }
             Screen::Download => {
