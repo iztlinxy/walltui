@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, generate_filename};
 use crate::core::models::{Provider, Wallpaper};
+use crate::infrastructure::config_loader::AppConfig;
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::config::ConfigScreen;
 use crate::ui::screens::detail::DetailScreen;
@@ -45,13 +46,17 @@ impl App {
         let manager = Arc::new(DownloadManager::new());
         manager.start_worker(tx);
 
+        let config = AppConfig::load();
+        let theme_mode = if config.theme == "light" { ThemeMode::Light } else { ThemeMode::Dark };
+        let theme = if config.theme == "light" { Theme::light() } else { Theme::dark() };
+
         Self {
             should_quit: false,
             current_screen: Screen::Splash,
             previous_screen: None,
-            active_provider: Provider::Wallhaven,
-            theme: Theme::dark(),
-            theme_mode: ThemeMode::Dark,
+            active_provider: config.default_provider,
+            theme,
+            theme_mode,
             search_query: String::new(),
             cursor_pos: 0,
             search_focused: false,
@@ -113,6 +118,9 @@ impl App {
                 self.theme = Theme::dark();
             }
         }
+        let mut config = AppConfig::load();
+        config.theme = if self.theme_mode == ThemeMode::Light { "light".to_string() } else { "dark".to_string() };
+        let _ = config.save();
     }
 
     pub fn switch_provider(&mut self, provider: Provider) {
