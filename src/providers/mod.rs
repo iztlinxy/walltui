@@ -1,10 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
-pub mod commons;
-pub mod pexels;
-pub mod pixabay;
-pub mod unsplash;
+pub mod pixiv;
+pub mod wallhaven;
 
 use crate::core::errors::AppError;
 use crate::core::models::{SearchQuery, Wallpaper};
