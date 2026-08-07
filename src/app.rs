@@ -1,6 +1,10 @@
-use ratatui::Frame;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-use crate::core::download::{DownloadManager, DownloadTask};
+use ratatui::Frame;
+use tokio::sync::mpsc;
+
+use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, generate_filename};
 use crate::core::models::{Provider, Wallpaper};
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::config::ConfigScreen;
@@ -30,11 +34,17 @@ pub struct App {
     pub wallpapers: Vec<Wallpaper>,
     pub selected_index: usize,
     pub download_tasks: Vec<DownloadTask>,
-    pub download_manager: DownloadManager,
+    pub download_manager: Arc<DownloadManager>,
+    pub download_rx: mpsc::Receiver<DownloadEvent>,
+    pub notification: Option<String>,
 }
 
 impl App {
     pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel(100);
+        let manager = Arc::new(DownloadManager::new());
+        manager.start_worker(tx);
+
         Self {
             should_quit: false,
             current_screen: Screen::Splash,
@@ -48,11 +58,31 @@ impl App {
             wallpapers: Vec::new(),
             selected_index: 0,
             download_tasks: Vec::new(),
-            download_manager: DownloadManager::new(),
+            download_manager: manager,
+            download_rx: rx,
+            notification: None,
         }
     }
 
-    pub fn tick(&mut self) {}
+    pub async fn tick(&mut self) {
+        while let Ok(event) = self.download_rx.try_recv() {
+            match event {
+                DownloadEvent::Progress(idx, progress) => {
+                    if let Some(task) = self.download_tasks.get_mut(idx) {
+                        task.progress = progress;
+                    }
+                }
+                DownloadEvent::Completed(idx) => {
+                    if let Some(task) = self.download_tasks.get(idx) {
+                        let title = task.wallpaper.title.clone();
+                        self.notification = Some(format!("Downloaded: {title}"));
+                    }
+                }
+            }
+        }
+
+        self.download_tasks = self.download_manager.tasks().await;
+    }
 
     pub fn quit(&mut self) {
         self.should_quit = true;
@@ -128,6 +158,36 @@ impl App {
         if self.selected_index + 1 < self.wallpapers.len() {
             self.selected_index += 1;
         }
+    }
+
+    pub fn enqueue_download(&mut self, wallpaper: &Wallpaper) {
+        let save_dir = dirs::download_dir().unwrap_or_else(|| PathBuf::from("."));
+        let filename = generate_filename(wallpaper);
+        let save_path = save_dir.join(filename);
+        let task = DownloadTask::new(wallpaper.clone(), save_path);
+        self.download_tasks.push(task.clone());
+        tokio::spawn({
+            let manager = Arc::clone(&self.download_manager);
+            async move {
+                manager.enqueue(task).await;
+            }
+        });
+    }
+
+    pub async fn cancel_download(&mut self, index: usize) {
+        self.download_manager.cancel(index).await;
+    }
+
+    pub async fn retry_download(&mut self, index: usize) {
+        self.download_manager.retry(index).await;
+    }
+
+    pub async fn clear_completed_downloads(&mut self) {
+        self.download_manager.remove_completed().await;
+    }
+
+    pub fn clear_notification(&mut self) {
+        self.notification = None;
     }
 
     pub fn draw(&self, frame: &mut Frame) {

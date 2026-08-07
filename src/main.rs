@@ -53,11 +53,11 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
 
         tokio::select! {
             _ = tick_rate.tick() => {
-                app.tick();
+                app.tick().await;
             }
             result = tokio::task::spawn_blocking(|| event::read()) => {
                 let event = result??;
-                handle_event(&mut app, event)?;
+                handle_event(&mut app, event).await?;
             }
         }
     }
@@ -65,25 +65,25 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
+async fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
     if let Event::Key(key) = event {
         if key.kind == KeyEventKind::Press {
             match key.code {
                 KeyCode::Char('q') => app.quit(),
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.quit(),
-                _ => handle_screen_event(app, key.code, key.modifiers)?,
+                _ => handle_screen_event(app, key.code, key.modifiers).await?,
             }
         }
     }
     Ok(())
 }
 
-fn handle_screen_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> color_eyre::Result<()> {
+async fn handle_screen_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> color_eyre::Result<()> {
     match app.current_screen {
         Screen::Splash => handle_splash_event(app, key),
         Screen::Search => handle_search_event(app, key, modifiers),
         Screen::Detail => handle_detail_event(app, key),
-        Screen::Download => handle_download_event(app, key),
+        Screen::Download => handle_download_event(app, key).await,
         Screen::Config => handle_config_event(app, key, modifiers),
     }
     Ok(())
@@ -148,16 +148,21 @@ fn handle_detail_event(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc => app.go_back(),
         KeyCode::Char('d') => {
-            info!("Download image: {}", app.selected_index);
+            if let Some(wallpaper) = app.wallpapers.get(app.selected_index).cloned() {
+                app.enqueue_download(&wallpaper);
+                app.navigate_to(Screen::Download);
+            }
         }
         KeyCode::Char('o') => {
-            info!("Open in browser");
+            if let Some(wallpaper) = app.wallpapers.get(app.selected_index) {
+                let _ = open::that(&wallpaper.url);
+            }
         }
         _ => {}
     }
 }
 
-fn handle_download_event(app: &mut App, key: KeyCode) {
+async fn handle_download_event(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc => app.go_back(),
         KeyCode::Up | KeyCode::Char('k') => {
@@ -171,13 +176,13 @@ fn handle_download_event(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('x') => {
-            info!("Cancel download");
+            app.cancel_download(app.selected_index).await;
         }
         KeyCode::Char('r') => {
-            info!("Retry download");
+            app.retry_download(app.selected_index).await;
         }
         KeyCode::Char('c') => {
-            info!("Clear completed");
+            app.clear_completed_downloads().await;
         }
         _ => {}
     }
