@@ -29,6 +29,8 @@ impl WallhavenAdapter {
             url.push_str(&format!("&apikey={key}"));
         }
 
+        url.push_str("&sorting=random");
+
         if query.page > 1 {
             url.push_str(&format!("&page={}", query.page));
         }

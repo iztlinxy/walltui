@@ -33,6 +33,7 @@ pub struct App {
     pub search_query: String,
     pub cursor_pos: usize,
     pub search_focused: bool,
+    pub search_page: u32,
     pub wallpapers: Vec<Wallpaper>,
     pub selected_index: usize,
     pub download_tasks: Vec<DownloadTask>,
@@ -69,6 +70,7 @@ impl App {
             search_query: String::new(),
             cursor_pos: 0,
             search_focused: false,
+            search_page: 1,
             wallpapers: Vec::new(),
             selected_index: 0,
             download_tasks: Vec::new(),
@@ -193,7 +195,9 @@ impl App {
         };
 
         let adapter = create_provider(self.active_provider, api_key);
-        let query = SearchQuery::builder(&self.search_query).build();
+        let query = SearchQuery::builder(&self.search_query)
+            .page(self.search_page)
+            .build();
 
         match adapter.search(&query).await {
             Ok(results) => {
@@ -205,6 +209,32 @@ impl App {
                 self.wallpapers.clear();
                 self.selected_index = 0;
             }
+        }
+    }
+
+    pub async fn search_next_page(&mut self) {
+        self.search_page += 1;
+        self.execute_search().await;
+    }
+
+    pub async fn search_prev_page(&mut self) {
+        if self.search_page > 1 {
+            self.search_page -= 1;
+            self.execute_search().await;
+        }
+    }
+
+    pub fn reset_search_page(&mut self) {
+        self.search_page = 1;
+    }
+
+    pub fn next_page(&mut self) {
+        self.search_page += 1;
+    }
+
+    pub fn prev_page(&mut self) {
+        if self.search_page > 1 {
+            self.search_page -= 1;
         }
     }
 
@@ -258,6 +288,7 @@ impl App {
                     self.selected_index,
                     &self.wallpapers,
                     self.active_provider,
+                    self.search_page,
                     &self.theme,
                 )
                 .render(frame, body_area);

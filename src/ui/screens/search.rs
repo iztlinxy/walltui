@@ -19,6 +19,7 @@ pub struct SearchScreen<'a> {
     selected: usize,
     wallpapers: &'a [Wallpaper],
     active_provider: Provider,
+    search_page: u32,
     theme: &'a Theme,
 }
 
@@ -30,6 +31,7 @@ impl<'a> SearchScreen<'a> {
         selected: usize,
         wallpapers: &'a [Wallpaper],
         active_provider: Provider,
+        search_page: u32,
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -39,6 +41,7 @@ impl<'a> SearchScreen<'a> {
             selected,
             wallpapers,
             active_provider,
+            search_page,
             theme,
         }
     }
@@ -73,10 +76,12 @@ impl<'a> SearchScreen<'a> {
 
         let provider_label = self.active_provider.to_string();
         let provider_text = format!("Provider: {provider_label}");
+        let page_text = format!("Page: {}", self.search_page);
         let help_shortcuts: Vec<(&str, &str)> = vec![
             ("/", "Search"),
             ("1/2", &provider_text),
             ("↑/↓", "Navigate"),
+            ("n/p", &page_text),
             ("Enter", "View"),
             ("d", "Download"),
             ("Esc", "Back"),

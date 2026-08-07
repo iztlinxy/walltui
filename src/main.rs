@@ -105,6 +105,7 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
             }
             KeyCode::Enter => {
                 app.search_focused = false;
+                app.reset_search_page();
                 app.execute_search().await;
             }
             KeyCode::Backspace => {
@@ -139,6 +140,16 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
             KeyCode::Char('d') => {
                 app.navigate_to(Screen::Download);
             }
+            KeyCode::Char('n') => {
+                if !app.search_query.is_empty() {
+                    app.search_next_page().await;
+                }
+            }
+            KeyCode::Char('p') => {
+                if !app.search_query.is_empty() {
+                    app.search_prev_page().await;
+                }
+            }
             _ => {}
         }
     }
@@ -155,7 +166,8 @@ fn handle_detail_event(app: &mut App, key: KeyCode) {
         }
         KeyCode::Char('o') => {
             if let Some(wallpaper) = app.wallpapers.get(app.selected_index) {
-                let _ = open::that(&wallpaper.url);
+                let url = wallpaper.web_url.as_deref().unwrap_or(&wallpaper.url);
+                let _ = open::that(url);
             }
         }
         _ => {}
