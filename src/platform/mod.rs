@@ -46,7 +46,12 @@ fn set_wallpaper_linux(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let path_str = path.to_str().ok_or("Invalid path")?;
     // Try gsettings (GNOME) first, then feh (i3/standalone)
     if std::process::Command::new("gsettings")
-        .args(["set", "org.gnome.desktop.background", "picture-uri", &format!("file://{path_str}")])
+        .args([
+            "set",
+            "org.gnome.desktop.background",
+            "picture-uri",
+            &format!("file://{path_str}"),
+        ])
         .output()
         .is_ok()
     {

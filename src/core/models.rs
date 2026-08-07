@@ -17,6 +17,11 @@ pub struct Wallpaper {
     pub attribution: Option<String>,
     pub file_type: Option<String>,
     pub web_url: Option<String>,
+    pub tags: Vec<String>,
+    pub category: Option<String>,
+    pub purity: Option<String>,
+    pub views: Option<u64>,
+    pub favorites: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +156,11 @@ mod tests {
             attribution: None,
             file_type: None,
             web_url: None,
+            tags: vec!["test".to_string()],
+            category: None,
+            purity: None,
+            views: None,
+            favorites: None,
         }
     }
 

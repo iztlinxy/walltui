@@ -1,9 +1,9 @@
 use ratatui::{
     Frame,
-    layout::Rect,
-    style::Style,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
 use crate::core::models::Wallpaper;
@@ -25,25 +25,45 @@ impl<'a> ImageList<'a> {
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(area);
+
+        self.render_list(frame, chunks[0]);
+        self.render_thumbnail(frame, chunks[1]);
+    }
+
+    fn render_list(&self, frame: &mut Frame, area: Rect) {
         let items: Vec<ListItem> = self
             .wallpapers
             .iter()
             .map(|w| {
-                let title = &w.title;
                 let dims = match (w.width, w.height) {
                     (Some(w), Some(h)) => format!("{w}x{h}"),
                     _ => "?".to_string(),
                 };
+                let category = w.category.as_deref().unwrap_or("");
+                let purity = w.purity.as_deref().unwrap_or("");
+                let tags_preview = if w.tags.is_empty() {
+                    String::new()
+                } else {
+                    let tags: Vec<&str> = w.tags.iter().take(3).map(|s| s.as_str()).collect();
+                    format!(" [{}]", tags.join(", "))
+                };
+
                 let line = Line::from(vec![
                     Span::styled(
                         format!(" {} ", w.provider),
-                        Style::default().fg(self.theme.secondary),
+                        Style::default().fg(self.theme.primary),
                     ),
-                    Span::raw(format!("{title} ")),
+                    Span::raw(format!("{} ", w.title)),
+                    Span::styled(format!("[{}]", dims), Style::default().fg(Color::DarkGray)),
                     Span::styled(
-                        format!("[{dims}]"),
-                        Style::default().fg(self.theme.secondary),
+                        format!(" {} {}", category, purity),
+                        Style::default().fg(Color::Yellow),
                     ),
+                    Span::raw(tags_preview),
                 ]);
                 ListItem::new(line)
             })
@@ -60,10 +80,51 @@ impl<'a> ImageList<'a> {
             .highlight_style(
                 Style::default()
                     .bg(self.theme.primary)
-                    .fg(self.theme.background),
+                    .fg(self.theme.background)
+                    .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("▶ ");
 
         frame.render_stateful_widget(list, area, &mut state);
+    }
+
+    fn render_thumbnail(&self, frame: &mut Frame, area: Rect) {
+        if let Some(wallpaper) = self.wallpapers.get(self.selected) {
+            let thumb_text = vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Selected Preview",
+                    Style::default()
+                        .fg(self.theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .alignment(Alignment::Center),
+                Line::from(""),
+                Line::from(Span::styled(
+                    &wallpaper.thumb_url,
+                    Style::default().fg(Color::DarkGray),
+                ))
+                .alignment(Alignment::Center),
+                Line::from(""),
+                Line::from(Span::styled(
+                    format!(
+                        "{}x{}",
+                        wallpaper.width.unwrap_or(0),
+                        wallpaper.height.unwrap_or(0)
+                    ),
+                    Style::default().fg(Color::DarkGray),
+                ))
+                .alignment(Alignment::Center),
+            ];
+
+            let thumb = Paragraph::new(thumb_text).block(
+                Block::default()
+                    .title(" Thumbnail ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            );
+
+            frame.render_widget(thumb, area);
+        }
     }
 }

@@ -57,6 +57,22 @@ struct WallhavenResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+struct WallhavenTag {
+    id: u64,
+    name: String,
+    #[serde(default)]
+    alias: String,
+    #[serde(default)]
+    category_id: u64,
+    #[serde(default)]
+    category: String,
+    #[serde(default)]
+    purity: String,
+    #[serde(default)]
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct WallhavenWallpaper {
     id: String,
     url: String,
@@ -89,6 +105,8 @@ struct WallhavenWallpaper {
     path: String,
     #[serde(default)]
     thumbs: WallhavenThumbs,
+    #[serde(default)]
+    tags: Vec<WallhavenTag>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -103,6 +121,7 @@ struct WallhavenThumbs {
 
 impl WallhavenWallpaper {
     fn to_wallpaper(&self) -> Wallpaper {
+        let tags: Vec<String> = self.tags.iter().map(|t| t.name.clone()).collect();
         Wallpaper {
             id: self.id.clone(),
             provider: Provider::Wallhaven,
@@ -114,8 +133,25 @@ impl WallhavenWallpaper {
             height: Some(self.dimension_y),
             avg_color: self.colors.first().cloned(),
             attribution: None,
-            file_type: if self.file_type.is_empty() { None } else { Some(self.file_type.clone()) },
+            file_type: if self.file_type.is_empty() {
+                None
+            } else {
+                Some(self.file_type.clone())
+            },
             web_url: Some(self.url.clone()),
+            tags,
+            category: if self.category.is_empty() {
+                None
+            } else {
+                Some(self.category.clone())
+            },
+            purity: if self.purity.is_empty() {
+                None
+            } else {
+                Some(self.purity.clone())
+            },
+            views: Some(self.views),
+            favorites: Some(self.favorites),
         }
     }
 }
