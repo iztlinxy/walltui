@@ -114,6 +114,7 @@ impl WallhavenWallpaper {
             height: Some(self.dimension_y),
             avg_color: self.colors.first().cloned(),
             attribution: None,
+            file_type: if self.file_type.is_empty() { None } else { Some(self.file_type.clone()) },
         }
     }
 }

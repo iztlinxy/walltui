@@ -15,6 +15,7 @@ pub struct Wallpaper {
     pub height: Option<u32>,
     pub avg_color: Option<String>,
     pub attribution: Option<String>,
+    pub file_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +148,7 @@ mod tests {
             height: Some(1080),
             avg_color: Some("#ff0000".to_string()),
             attribution: None,
+            file_type: None,
         }
     }
 

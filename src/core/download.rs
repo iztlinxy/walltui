@@ -253,7 +253,35 @@ pub fn generate_filename(wallpaper: &Wallpaper) -> String {
         (Some(w), Some(h)) => format!("{w}x{h}"),
         _ => "unknown".to_string(),
     };
-    format!("{provider}_{id}_{dimensions}.jpg")
+
+    let extension = get_extension(wallpaper);
+
+    format!("{provider}_{id}_{dimensions}.{extension}")
+}
+
+fn get_extension(wallpaper: &Wallpaper) -> &'static str {
+    if let Some(file_type) = &wallpaper.file_type {
+        match file_type.as_str() {
+            "image/jpeg" => return "jpg",
+            "image/png" => return "png",
+            "image/webp" => return "webp",
+            "image/gif" => return "gif",
+            _ => {}
+        }
+    }
+
+    if let Some(idx) = wallpaper.url.rfind('.') {
+        let ext = wallpaper.url[idx + 1..].to_lowercase();
+        match ext.as_str() {
+            "jpg" | "jpeg" => return "jpg",
+            "png" => return "png",
+            "webp" => return "webp",
+            "gif" => return "gif",
+            _ => {}
+        }
+    }
+
+    "jpg"
 }
 
 fn sanitize_id(id: &str) -> String {
