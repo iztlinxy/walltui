@@ -7,9 +7,11 @@
 \_/ \_/ |_| |_|\____/|____|  |_|  |_____| |_____|
   </pre>
   <p align="center"><b>Terminal Wallpaper Manager</b></p>
+  <p align="center"><b>v1.0</b></p>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-%23007EC6?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/TUI-ratatui-%23B14B2E?style=for-the-badge&logo=rust&logoColor=white" alt="ratatui">
   <img src="https://img.shields.io/badge/license-MIT-%23007EC6?style=for-the-badge" alt="License">
@@ -25,7 +27,8 @@ Browse, preview, and download wallpapers from **Wallhaven** — all from your te
 - **Resolution picker** — download at 720p, 1080p, 1440p, 4K, ultrawide, or phone with stretch/crop/fit modes
 - **Gallery** — browse your downloaded wallpapers with cached thumbnails
 - **Download manager** — queue, cancel, retry with progress tracking
-- **Persistent config** — API key, download dir, and default provider saved automatically
+- **Search filters** — toggle SFW / Sketchy / NSFW purity and General / Anime / People categories
+- **Persistent config** — API key, download dir, purity, and categories saved automatically
 
 ## Quick Start
 
@@ -112,6 +115,15 @@ Splash ──┬── s ──→ Search ──→ Detail ──┬── d ─
 | `r` | Reload |
 | `Esc` | Back |
 
+### Settings
+
+| Key | Action |
+|:---:|--------|
+| `↑`/`↓` or `k`/`j` | Navigate fields |
+| `Enter` | Edit (API key, download dir) or Toggle (purity, categories) |
+| `Esc` | Back / Cancel edit |
+| `Ctrl+S` | Save |
+
 ## Download Resolutions
 
 | Preset | Dimensions | Default Mode |
@@ -131,6 +143,23 @@ Splash ──┬── s ──→ Search ──→ Detail ──┬── d ─
 - **Crop** — resize to target, center-crop to fill
 - **Fit** — resize to fit within bounds, preserves aspect ratio
 
+## Settings
+
+Toggle purity and category filters directly from the Settings screen. Filters are sent to Wallhaven as binary strings (e.g. `110` = SFW+Sketchy, `101` = SFW+NSFW).
+
+| Field | Description |
+|-------|-------------|
+| **API Key** | Wallhaven API key. Only sent when NSFW is enabled |
+| **Download** | Directory where wallpapers are saved |
+| **SFW** | Safe for work content |
+| **Sketchy** | Borderline content |
+| **NSFW** | Not safe for work (requires API key) |
+| **General** | General category wallpapers |
+| **Anime** | Anime category wallpapers |
+| **People** | People category wallpapers |
+
+> **API Key:** Optional for Wallhaven. Required only for NSFW content. Get yours at [wallhaven.cc/settings](https://wallhaven.cc/settings).
+
 ## Configuration
 
 Stored at the OS config directory:
@@ -145,9 +174,13 @@ Stored at the OS config directory:
 wallhaven_api_key = "your-key-here"
 download_dir = "~/Downloads/wallpapers"
 default_provider = "Wallhaven"
+purity_sfw = true
+purity_sketchy = false
+purity_nsfw = false
+category_general = true
+category_anime = true
+category_people = false
 ```
-
-> **API Key:** Optional for Wallhaven. Required only for NSFW content. Get yours at [wallhaven.cc/settings](https://wallhaven.cc/settings).
 
 ## Tech Stack
 

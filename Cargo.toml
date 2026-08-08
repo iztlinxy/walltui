@@ -1,6 +1,6 @@
 [package]
 name = "walltui"
-version = "0.1.0"
+version = "1.0.0"
 description = "A Ratatui Hello World app"
 authors = ["Josh McKinney <joshka@users.noreply.github.com>"]
 license = "MIT"
