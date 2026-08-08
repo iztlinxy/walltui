@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 
 use crate::core::models::Wallpaper;
+use crate::ui::screens::resolution_select::{CropMode, ResolutionOption};
 
 #[derive(Debug, Clone)]
 pub struct DownloadTask {
@@ -12,6 +13,7 @@ pub struct DownloadTask {
     pub progress: u8,
     pub save_path: PathBuf,
     pub cancel_flag: Arc<std::sync::atomic::AtomicBool>,
+    pub resolution: Option<ResolutionOption>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +32,7 @@ impl DownloadTask {
             progress: 0,
             save_path,
             cancel_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            resolution: None,
         }
     }
 
@@ -111,18 +114,19 @@ impl DownloadManager {
                         queue[idx].status = DownloadStatus::Active;
                     }
 
-                    let (wallpaper, save_path, cancel_flag) = {
+                    let (wallpaper, save_path, cancel_flag, resolution) = {
                         let queue = manager.queue.lock().await;
                         let task = &queue[idx];
                         (
                             task.wallpaper.clone(),
                             task.save_path.clone(),
                             Arc::clone(&task.cancel_flag),
+                            task.resolution.clone(),
                         )
                     };
 
                     let result =
-                        download_with_progress(&wallpaper, &save_path, &cancel_flag, &tx, idx)
+                        download_with_progress(&wallpaper, &save_path, &cancel_flag, &tx, idx, resolution.as_ref())
                             .await;
 
                     let mut queue = manager.queue.lock().await;
@@ -168,6 +172,7 @@ async fn download_with_progress(
     cancel_flag: &Arc<std::sync::atomic::AtomicBool>,
     tx: &mpsc::Sender<DownloadEvent>,
     task_idx: usize,
+    resolution: Option<&ResolutionOption>,
 ) -> Result<(), String> {
     let url = &wallpaper.url;
 
@@ -176,7 +181,7 @@ async fn download_with_progress(
             return Err("Cancelled".to_string());
         }
 
-        match try_download(url, save_path, cancel_flag, tx, task_idx).await {
+        match try_download(url, save_path, cancel_flag, tx, task_idx, resolution).await {
             Ok(()) => return Ok(()),
             Err(e) => {
                 if attempt < 2 {
@@ -197,6 +202,7 @@ async fn try_download(
     cancel_flag: &Arc<std::sync::atomic::AtomicBool>,
     tx: &mpsc::Sender<DownloadEvent>,
     task_idx: usize,
+    resolution: Option<&ResolutionOption>,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let response = client.get(url).send().await.map_err(|e| e.to_string())?;
@@ -222,9 +228,10 @@ async fn try_download(
     let mut stream = response.bytes_stream();
     use futures_util::StreamExt;
 
+    let mut buffer = Vec::new();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
-        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        buffer.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
 
         if let Some(progress) = downloaded
@@ -240,6 +247,56 @@ async fn try_download(
             let _ = tokio::fs::remove_file(save_path).await;
             return Err("Cancelled".to_string());
         }
+    }
+
+    if let Some(res_opt) = resolution {
+        let img = image::load_from_memory(&buffer).map_err(|e| e.to_string())?;
+        let (target_w, target_h) = res_opt.dimensions();
+        let processed = match res_opt {
+            ResolutionOption::Original => {
+                file.write_all(&buffer).await.map_err(|e| e.to_string())?;
+                file.flush().await.map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+            ResolutionOption::Custom(_, _, _) |
+            ResolutionOption::HD720(_, _) |
+            ResolutionOption::FHD1080(_, _) |
+            ResolutionOption::QHD1440(_, _) |
+            ResolutionOption::UHD2160(_, _) |
+            ResolutionOption::Ultrawide2560(_, _) |
+            ResolutionOption::Ultrawide3440(_, _) |
+            ResolutionOption::MacBook16(_, _) |
+            ResolutionOption::Phone1080(_, _) => {
+                match res_opt.crop_mode() {
+                    CropMode::Scale => {
+                        img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3)
+                    }
+                    CropMode::CropCenter => {
+                        let resized = img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3);
+                        resized
+                    }
+                    CropMode::Fit => {
+                        img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3)
+                    }
+                }
+            }
+        };
+        let mut out_buf = Vec::new();
+        let ext = save_path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+        match ext {
+            "png" => {
+                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+            }
+            "webp" => {
+                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::WebP).map_err(|e| e.to_string())?;
+            }
+            _ => {
+                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::Jpeg).map_err(|e| e.to_string())?;
+            }
+        }
+        file.write_all(&out_buf).await.map_err(|e| e.to_string())?;
+    } else {
+        file.write_all(&buffer).await.map_err(|e| e.to_string())?;
     }
 
     file.flush().await.map_err(|e| e.to_string())?;

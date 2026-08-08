@@ -7,6 +7,7 @@ use tracing::info;
 use walltui::app::App;
 use walltui::core::models::Provider;
 use walltui::ui::screens::Screen;
+use walltui::ui::screens::resolution_select::ResolutionOption;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -82,9 +83,11 @@ async fn handle_screen_event(
     match app.current_screen {
         Screen::Splash => handle_splash_event(app, key),
         Screen::Search => handle_search_event(app, key, modifiers).await,
-        Screen::Detail => handle_detail_event(app, key),
+        Screen::Detail => handle_detail_event(app, key).await,
         Screen::Download => handle_download_event(app, key).await,
         Screen::Config => handle_config_event(app, key, modifiers),
+        Screen::Gallery => handle_gallery_event(app, key).await,
+        Screen::ResolutionSelect => handle_resolution_select_event(app, key).await,
     }
     Ok(())
 }
@@ -92,6 +95,10 @@ async fn handle_screen_event(
 fn handle_splash_event(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Char('s') => app.navigate_to(Screen::Search),
+        KeyCode::Char('g') => {
+            app.load_gallery();
+            app.navigate_to(Screen::Gallery);
+        }
         KeyCode::Char('c') => app.navigate_to(Screen::Config),
         _ => {}
     }
@@ -129,7 +136,6 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
                 app.search_focused = true;
             }
             KeyCode::Char('1') => app.switch_provider(Provider::Wallhaven),
-            KeyCode::Char('2') => app.switch_provider(Provider::Pixiv),
             KeyCode::Up | KeyCode::Char('k') => app.move_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => app.move_selection_down(),
             KeyCode::Enter => {
@@ -151,13 +157,14 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
     }
 }
 
-fn handle_detail_event(app: &mut App, key: KeyCode) {
+async fn handle_detail_event(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc => app.go_back(),
         KeyCode::Char('d') => {
             if let Some(wallpaper) = app.wallpapers.get(app.selected_index).cloned() {
-                app.enqueue_download(&wallpaper);
-                app.navigate_to(Screen::Download);
+                app.pending_download_wallpaper = Some(wallpaper);
+                app.resolution_selected_index = 0;
+                app.navigate_to(Screen::ResolutionSelect);
             }
         }
         KeyCode::Char('o') => {
@@ -219,5 +226,55 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
             }
             _ => {}
         }
+    }
+}
+
+async fn handle_gallery_event(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc => app.go_back(),
+        KeyCode::Up | KeyCode::Char('k') => app.move_gallery_selection_up(),
+        KeyCode::Down | KeyCode::Char('j') => app.move_gallery_selection_down(),
+        KeyCode::Char('r') => app.load_gallery(),
+        KeyCode::Enter => {
+            if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
+                let _ = open::that(&wallpaper.url);
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn handle_resolution_select_event(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc => app.go_back(),
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.resolution_selected_index > 0 {
+                app.resolution_selected_index -= 1;
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.resolution_selected_index + 1 < app.resolution_options.len() {
+                app.resolution_selected_index += 1;
+            }
+        }
+        KeyCode::Char('c') => {
+            if let Some(opt) = app.resolution_options.get_mut(app.resolution_selected_index) {
+                opt.cycle_crop_mode();
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(wallpaper) = app.pending_download_wallpaper.clone() {
+                let resolution = app.resolution_options.get(app.resolution_selected_index).cloned();
+                let resolution = match resolution {
+                    Some(ResolutionOption::Original) => None,
+                    Some(opt) => Some(opt),
+                    None => None,
+                };
+                app.enqueue_download(&wallpaper, resolution);
+                app.pending_download_wallpaper = None;
+                app.navigate_to(Screen::Download);
+            }
+        }
+        _ => {}
     }
 }

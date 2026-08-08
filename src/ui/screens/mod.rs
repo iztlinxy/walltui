@@ -1,6 +1,8 @@
 pub mod config;
 pub mod detail;
 pub mod download;
+pub mod gallery;
+pub mod resolution_select;
 pub mod search;
 pub mod splash;
 
@@ -11,4 +13,6 @@ pub enum Screen {
     Detail,
     Download,
     Config,
+    Gallery,
+    ResolutionSelect,
 }

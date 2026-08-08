@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::core::download::{DownloadStatus, DownloadTask};
+use crate::ui::screens::resolution_select::ResolutionOption;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::help_bar::HelpBar;
 
@@ -59,9 +60,15 @@ impl<'a> DownloadScreen<'a> {
                         DownloadStatus::Completed => Style::default().fg(self.theme.success),
                         DownloadStatus::Failed(_) => Style::default().fg(self.theme.error),
                     };
+                    let res_str = match &task.resolution {
+                        Some(ResolutionOption::Original) => String::new(),
+                        Some(opt) => format!(" [{}]", opt.dimensions().0) ,
+                        None => String::new(),
+                    };
                     let line = Line::from(vec![
                         Span::styled(format!("[{status_str}] "), status_style),
                         Span::raw(&task.wallpaper.title),
+                        Span::styled(res_str, Style::default().fg(self.theme.secondary)),
                     ]);
                     ListItem::new(line)
                 })

@@ -18,6 +18,8 @@ use crate::ui::screens::Screen;
 use crate::ui::screens::config::ConfigScreen;
 use crate::ui::screens::detail::DetailScreen;
 use crate::ui::screens::download::DownloadScreen;
+use crate::ui::screens::gallery::GalleryScreen;
+use crate::ui::screens::resolution_select::{ResolutionOption, ResolutionSelectScreen};
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
 use crate::ui::theme::Theme;
@@ -46,12 +48,23 @@ pub struct App {
     pub config_input: String,
     pub config_cursor: usize,
     pub config_editing: bool,
+    pub gallery_wallpapers: Vec<Wallpaper>,
+    pub gallery_selected_index: usize,
+    pub gallery_thumbnail_lines: Vec<Line<'static>>,
+    pub gallery_thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
+    pub gallery_thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
+    pub gallery_thumbnail_loading_id: Option<String>,
+    pub gallery_thumbnail_cache: std::collections::HashMap<String, Vec<Line<'static>>>,
+    pub pending_download_wallpaper: Option<Wallpaper>,
+    pub resolution_selected_index: usize,
+    pub resolution_options: Vec<ResolutionOption>,
 }
 
 impl App {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(100);
         let (thumb_tx, thumb_rx) = mpsc::channel(10);
+        let (gallery_thumb_tx, gallery_thumb_rx) = mpsc::channel(10);
         let manager = Arc::new(DownloadManager::new());
         manager.start_worker(tx);
 
@@ -84,6 +97,16 @@ impl App {
             config_input,
             config_cursor: 0,
             config_editing: false,
+            gallery_wallpapers: Vec::new(),
+            gallery_selected_index: 0,
+            gallery_thumbnail_lines: Vec::new(),
+            gallery_thumbnail_rx: gallery_thumb_rx,
+            gallery_thumbnail_tx: gallery_thumb_tx,
+            gallery_thumbnail_loading_id: None,
+            gallery_thumbnail_cache: std::collections::HashMap::new(),
+            pending_download_wallpaper: None,
+            resolution_selected_index: 0,
+            resolution_options: ResolutionOption::presets(),
         }
     }
 
@@ -114,6 +137,18 @@ impl App {
             }
         }
 
+        while let Ok(img) = self.gallery_thumbnail_rx.try_recv() {
+            if let Some(img) = img {
+                let lines = image_to_lines(&img, 60, 25);
+                if let Some(w) = self.gallery_wallpapers.get(self.gallery_selected_index) {
+                    self.gallery_thumbnail_cache.insert(w.id.clone(), lines.clone());
+                }
+                self.gallery_thumbnail_lines = lines;
+            } else {
+                self.gallery_thumbnail_lines = Vec::new();
+            }
+        }
+
         if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
             && let Some(wallpaper) = self.wallpapers.get(self.selected_index)
             && self.thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
@@ -125,6 +160,24 @@ impl App {
             tokio::spawn(async move {
                 load_thumbnail_async(wallpaper, tx).await;
             });
+        }
+
+        if self.current_screen == Screen::Gallery
+            && let Some(wallpaper) = self.gallery_wallpapers.get(self.gallery_selected_index)
+            && self.gallery_thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
+        {
+            if let Some(cached) = self.gallery_thumbnail_cache.get(&wallpaper.id) {
+                self.gallery_thumbnail_lines = cached.clone();
+                self.gallery_thumbnail_loading_id = Some(wallpaper.id.clone());
+            } else {
+                self.gallery_thumbnail_loading_id = Some(wallpaper.id.clone());
+                self.gallery_thumbnail_lines = Vec::new();
+                let tx = self.gallery_thumbnail_tx.clone();
+                let path = PathBuf::from(&wallpaper.url);
+                tokio::spawn(async move {
+                    load_local_thumbnail_async(path, tx).await;
+                });
+            }
         }
     }
 
@@ -204,7 +257,6 @@ impl App {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
             Provider::Wallhaven => config.wallhaven_api_key,
-            Provider::Pixiv => config.pixiv_api_key,
         };
 
         let adapter = create_provider(self.active_provider, api_key);
@@ -258,12 +310,15 @@ impl App {
         }
     }
 
-    pub fn enqueue_download(&mut self, wallpaper: &Wallpaper) {
+    pub fn enqueue_download(&mut self, wallpaper: &Wallpaper, resolution: Option<ResolutionOption>) {
         let save_dir = self.download_dir.clone();
         let _ = std::fs::create_dir_all(&save_dir);
         let filename = generate_filename(wallpaper);
         let save_path = save_dir.join(filename);
-        let task = DownloadTask::new(wallpaper.clone(), save_path);
+        let mut task = DownloadTask::new(wallpaper.clone(), save_path);
+        if let Some(res) = resolution {
+            task.resolution = Some(res);
+        }
         self.download_tasks.push(task.clone());
         tokio::spawn({
             let manager = Arc::clone(&self.download_manager);
@@ -286,6 +341,25 @@ impl App {
     }
     pub fn clear_notification(&mut self) {
         self.notification = None;
+    }
+
+    pub fn load_gallery(&mut self) {
+        self.gallery_wallpapers = scan_local_wallpapers(&self.download_dir);
+        self.gallery_selected_index = 0;
+        self.gallery_thumbnail_lines = Vec::new();
+        self.gallery_thumbnail_loading_id = None;
+    }
+
+    pub fn move_gallery_selection_up(&mut self) {
+        if self.gallery_selected_index > 0 {
+            self.gallery_selected_index -= 1;
+        }
+    }
+
+    pub fn move_gallery_selection_down(&mut self) {
+        if self.gallery_selected_index + 1 < self.gallery_wallpapers.len() {
+            self.gallery_selected_index += 1;
+        }
     }
 
     pub fn start_config_edit(&mut self) {
@@ -367,7 +441,6 @@ impl App {
                     self.search_focused,
                     self.selected_index,
                     &self.wallpapers,
-                    self.active_provider,
                     self.search_page,
                     &self.thumbnail_lines,
                     &self.theme,
@@ -394,6 +467,32 @@ impl App {
                 )
                 .render(frame, body_area);
             }
+            Screen::Gallery => {
+                GalleryScreen::new(
+                    &self.gallery_wallpapers,
+                    self.gallery_selected_index,
+                    &self.gallery_thumbnail_lines,
+                    &self.theme,
+                    &self.download_dir,
+                )
+                .render(frame, body_area);
+            }
+            Screen::ResolutionSelect => {
+                if let Some(wallpaper) = &self.pending_download_wallpaper {
+                    let dims = match (wallpaper.width, wallpaper.height) {
+                        (Some(w), Some(h)) => Some((w, h)),
+                        _ => None,
+                    };
+                    ResolutionSelectScreen::new(
+                        &self.resolution_options,
+                        self.resolution_selected_index,
+                        &wallpaper.title,
+                        dims,
+                        &self.theme,
+                    )
+                    .render(frame, body_area);
+                }
+            }
         }
     }
 }
@@ -408,6 +507,60 @@ fn expand_tilde(path: &str) -> PathBuf {
             .unwrap_or_else(|| PathBuf::from(path));
     }
     PathBuf::from(path)
+}
+
+fn is_image_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|ext| matches!(ext.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "webp"))
+        .unwrap_or(false)
+}
+
+fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
+    let mut entries: Vec<Wallpaper> = std::fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if !path.is_file() || !is_image_file(&path) {
+                return None;
+            }
+            let filename = path.file_name()?.to_string_lossy().to_string();
+            let path_str = path.to_string_lossy().to_string();
+            let (width, height) = image::image_dimensions(&path).unwrap_or((0, 0));
+            Some(Wallpaper {
+                id: filename.clone(),
+                provider: crate::core::models::Provider::Wallhaven,
+                url: path_str.clone(),
+                thumb_url: path_str,
+                title: filename,
+                photographer: String::new(),
+                width: if width > 0 { Some(width) } else { None },
+                height: if height > 0 { Some(height) } else { None },
+                avg_color: None,
+                attribution: None,
+                file_type: None,
+                web_url: None,
+                tags: Vec::new(),
+                category: None,
+                purity: None,
+                views: None,
+                favorites: None,
+            })
+        })
+        .collect();
+    entries.sort_by(|a, b| a.title.cmp(&b.title));
+    entries
+}
+
+async fn load_local_thumbnail_async(path: PathBuf, tx: mpsc::Sender<Option<DynamicImage>>) {
+    let img = tokio::task::spawn_blocking(move || image::open(&path).ok())
+        .await
+        .ok()
+        .flatten();
+    let _ = tx.send(img).await;
 }
 
 async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Option<DynamicImage>>) {

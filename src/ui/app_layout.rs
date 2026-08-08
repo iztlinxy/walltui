@@ -55,6 +55,8 @@ impl<'a> AppLayout<'a> {
             Screen::Detail => "Detail",
             Screen::Download => "Downloads",
             Screen::Config => "Settings",
+            Screen::Gallery => "Gallery",
+            Screen::ResolutionSelect => "Resolution",
         };
         let footer_text = format!(" {screen_name} ");
         let footer = Paragraph::new(Line::from(vec![
