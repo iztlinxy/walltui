@@ -22,19 +22,12 @@ use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
 use crate::ui::theme::Theme;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThemeMode {
-    Dark,
-    Light,
-}
-
 pub struct App {
     pub should_quit: bool,
     pub current_screen: Screen,
     pub previous_screen: Option<Screen>,
     pub active_provider: Provider,
     pub theme: Theme,
-    pub theme_mode: ThemeMode,
     pub search_query: String,
     pub cursor_pos: usize,
     pub search_focused: bool,
@@ -49,6 +42,10 @@ pub struct App {
     pub thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
     pub thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
     pub thumbnail_loading_id: Option<String>,
+    pub download_dir: PathBuf,
+    pub config_input: String,
+    pub config_cursor: usize,
+    pub config_editing: bool,
 }
 
 impl App {
@@ -59,16 +56,9 @@ impl App {
         manager.start_worker(tx);
 
         let config = AppConfig::load();
-        let theme_mode = if config.theme == "light" {
-            ThemeMode::Light
-        } else {
-            ThemeMode::Dark
-        };
-        let theme = if config.theme == "light" {
-            Theme::light()
-        } else {
-            Theme::dark()
-        };
+        let theme = Theme::default();
+        let download_dir = config.download_dir.clone();
+        let config_input = download_dir.to_string_lossy().to_string();
 
         Self {
             should_quit: false,
@@ -76,7 +66,6 @@ impl App {
             previous_screen: None,
             active_provider: config.default_provider,
             theme,
-            theme_mode,
             search_query: String::new(),
             cursor_pos: 0,
             search_focused: false,
@@ -91,6 +80,10 @@ impl App {
             thumbnail_rx: thumb_rx,
             thumbnail_tx: thumb_tx,
             thumbnail_loading_id: None,
+            download_dir,
+            config_input,
+            config_cursor: 0,
+            config_editing: false,
         }
     }
 
@@ -151,26 +144,6 @@ impl App {
         } else {
             self.current_screen = Screen::Splash;
         }
-    }
-
-    pub fn toggle_theme(&mut self) {
-        match self.theme_mode {
-            ThemeMode::Dark => {
-                self.theme_mode = ThemeMode::Light;
-                self.theme = Theme::light();
-            }
-            ThemeMode::Light => {
-                self.theme_mode = ThemeMode::Dark;
-                self.theme = Theme::dark();
-            }
-        }
-        let mut config = AppConfig::load();
-        config.theme = if self.theme_mode == ThemeMode::Light {
-            "light".to_string()
-        } else {
-            "dark".to_string()
-        };
-        let _ = config.save();
     }
 
     pub fn switch_provider(&mut self, provider: Provider) {
@@ -286,7 +259,8 @@ impl App {
     }
 
     pub fn enqueue_download(&mut self, wallpaper: &Wallpaper) {
-        let save_dir = dirs::download_dir().unwrap_or_else(|| PathBuf::from("."));
+        let save_dir = self.download_dir.clone();
+        let _ = std::fs::create_dir_all(&save_dir);
         let filename = generate_filename(wallpaper);
         let save_path = save_dir.join(filename);
         let task = DownloadTask::new(wallpaper.clone(), save_path);
@@ -312,6 +286,66 @@ impl App {
     }
     pub fn clear_notification(&mut self) {
         self.notification = None;
+    }
+
+    pub fn start_config_edit(&mut self) {
+        self.config_editing = true;
+        self.config_input = self.download_dir.to_string_lossy().to_string();
+        self.config_cursor = self.config_input.len();
+    }
+
+    pub fn handle_config_input(&mut self, c: char) {
+        self.config_input.insert(self.config_cursor, c);
+        self.config_cursor += 1;
+    }
+
+    pub fn handle_config_backspace(&mut self) {
+        if self.config_cursor > 0 {
+            self.config_cursor -= 1;
+            self.config_input.remove(self.config_cursor);
+        }
+    }
+
+    pub fn handle_config_left(&mut self) {
+        if self.config_cursor > 0 {
+            self.config_cursor -= 1;
+        }
+    }
+
+    pub fn handle_config_right(&mut self) {
+        if self.config_cursor < self.config_input.len() {
+            self.config_cursor += 1;
+        }
+    }
+
+    pub fn cancel_config_edit(&mut self) {
+        self.config_editing = false;
+        self.config_input = self.download_dir.to_string_lossy().to_string();
+        self.config_cursor = 0;
+    }
+
+    pub fn confirm_config_download_dir(&mut self) {
+        let expanded = expand_tilde(&self.config_input);
+        if expanded.as_os_str().is_empty() {
+            self.notification = Some("Download directory cannot be empty".to_string());
+            return;
+        }
+        if let Err(e) = std::fs::create_dir_all(&expanded) {
+            self.notification = Some(format!("Failed to create directory: {e}"));
+            return;
+        }
+        self.download_dir = expanded.clone();
+        self.config_editing = false;
+        self.config_cursor = 0;
+        let mut config = AppConfig::load();
+        config.download_dir = expanded;
+        match config.save() {
+            Ok(_) => self.notification = Some(format!(
+                "Download dir saved: {}",
+                self.download_dir.display()
+            )),
+            Err(e) => self.notification = Some(format!("Failed to save config: {e}")),
+        }
     }
 
     pub fn draw(&self, frame: &mut Frame) {
@@ -351,10 +385,29 @@ impl App {
                     .render(frame, body_area);
             }
             Screen::Config => {
-                ConfigScreen::new(&self.theme).render(frame, body_area);
+                ConfigScreen::new(
+                    &self.theme,
+                    &self.download_dir.to_string_lossy(),
+                    &self.config_input,
+                    self.config_editing,
+                    self.config_cursor,
+                )
+                .render(frame, body_area);
             }
         }
     }
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if path == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from(path));
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        return dirs::home_dir()
+            .map(|home| home.join(rest))
+            .unwrap_or_else(|| PathBuf::from(path));
+    }
+    PathBuf::from(path)
 }
 
 async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Option<DynamicImage>>) {

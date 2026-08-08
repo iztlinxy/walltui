@@ -13,7 +13,6 @@ A terminal user interface (TUI) tool for searching and downloading wallpapers fr
 - Pagination support (`n` / `p`)
 - ASCII thumbnail preview in search and detail screens
 - Cross-platform wallpaper setter (Windows, Linux, macOS)
-- Theme switching (dark / light)
 - Configuration file persistence
 
 ## Installation
@@ -83,9 +82,9 @@ cargo run
 
 | Key | Action |
 |-----|--------|
-| `t` | Toggle theme |
-| `Ctrl+S` | Save configuration |
-| `Esc` | Back |
+| `Enter` | Edit download directory |
+| `Ctrl+S` | Save download directory |
+| `Esc` | Back / cancel edit |
 
 ## Configuration
 

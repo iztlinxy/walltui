@@ -197,12 +197,27 @@ async fn handle_download_event(app: &mut App, key: KeyCode) {
 }
 
 fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
-    match key {
-        KeyCode::Esc => app.go_back(),
-        KeyCode::Char('t') => app.toggle_theme(),
-        KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-            info!("Save config");
+    if app.config_editing {
+        match key {
+            KeyCode::Esc => app.cancel_config_edit(),
+            KeyCode::Enter => app.confirm_config_download_dir(),
+            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                app.confirm_config_download_dir();
+            }
+            KeyCode::Backspace => app.handle_config_backspace(),
+            KeyCode::Left => app.handle_config_left(),
+            KeyCode::Right => app.handle_config_right(),
+            KeyCode::Char(c) => app.handle_config_input(c),
+            _ => {}
         }
-        _ => {}
+    } else {
+        match key {
+            KeyCode::Esc => app.go_back(),
+            KeyCode::Enter => app.start_config_edit(),
+            KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                app.start_config_edit();
+            }
+            _ => {}
+        }
     }
 }

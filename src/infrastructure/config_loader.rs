@@ -10,7 +10,6 @@ pub struct AppConfig {
     pub pixiv_api_key: Option<String>,
     pub download_dir: PathBuf,
     pub default_provider: Provider,
-    pub theme: String,
 }
 
 impl Default for AppConfig {
@@ -20,7 +19,6 @@ impl Default for AppConfig {
             pixiv_api_key: None,
             download_dir: dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")),
             default_provider: Provider::Wallhaven,
-            theme: "dark".to_string(),
         }
     }
 }

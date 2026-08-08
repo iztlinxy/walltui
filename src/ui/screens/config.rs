@@ -11,11 +11,27 @@ use crate::ui::widgets::help_bar::HelpBar;
 
 pub struct ConfigScreen<'a> {
     theme: &'a Theme,
+    download_dir: &'a str,
+    input: &'a str,
+    editing: bool,
+    cursor: usize,
 }
 
 impl<'a> ConfigScreen<'a> {
-    pub fn new(theme: &'a Theme) -> Self {
-        Self { theme }
+    pub fn new(
+        theme: &'a Theme,
+        download_dir: &'a str,
+        input: &'a str,
+        editing: bool,
+        cursor: usize,
+    ) -> Self {
+        Self {
+            theme,
+            download_dir,
+            input,
+            editing,
+            cursor,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -24,7 +40,7 @@ impl<'a> ConfigScreen<'a> {
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(area);
 
-        let config_lines = vec![
+        let mut config_lines = vec![
             Line::from(Span::styled(
                 " Configuration",
                 Style::default().fg(self.theme.primary).bold(),
@@ -41,14 +57,17 @@ impl<'a> ConfigScreen<'a> {
                 " Download Directory:",
                 Style::default().fg(self.theme.secondary).bold(),
             )),
-            Line::from("   ~/Downloads/walltui"),
-            Line::from(""),
-            Line::from(Span::styled(
-                " Theme:",
-                Style::default().fg(self.theme.secondary).bold(),
-            )),
-            Line::from("   Dark (press 't' to toggle)"),
         ];
+
+        if self.editing {
+            config_lines.push(input_line(self.input, self.cursor, self.theme));
+            config_lines.push(Line::from(Span::styled(
+                "   [editing]",
+                Style::default().fg(self.theme.warning),
+            )));
+        } else {
+            config_lines.push(Line::from(format!("   {}", self.download_dir)));
+        }
 
         let config = Paragraph::new(config_lines).block(
             Block::default()
@@ -59,8 +78,30 @@ impl<'a> ConfigScreen<'a> {
 
         frame.render_widget(config, chunks[0]);
 
-        let help_shortcuts: Vec<(&str, &str)> =
-            vec![("t", "Toggle theme"), ("Ctrl+S", "Save"), ("Esc", "Back")];
+        let help_shortcuts: Vec<(&str, &str)> = if self.editing {
+            vec![("Enter", "Confirm"), ("Esc", "Cancel"), ("Ctrl+S", "Save")]
+        } else {
+            vec![("Enter", "Edit folder"), ("Esc", "Back")]
+        };
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
+}
+
+fn input_line(input: &str, cursor: usize, theme: &Theme) -> Line<'static> {
+    let before: String = input.chars().take(cursor).collect();
+    let mut iter = input.chars().skip(cursor);
+    let cursor_char = iter.next().unwrap_or(' ').to_string();
+    let after: String = iter.collect();
+
+    Line::from(vec![
+        Span::raw("> "),
+        Span::raw(before),
+        Span::styled(
+            cursor_char,
+            Style::default()
+                .bg(theme.primary)
+                .fg(theme.background),
+        ),
+        Span::raw(after),
+    ])
 }
