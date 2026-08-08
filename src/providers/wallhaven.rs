@@ -22,17 +22,27 @@ impl WallhavenAdapter {
         }
     }
 
-    fn build_search_url(&self, query: &SearchQuery) -> String {
+    fn build_search_url(&self, query: &SearchQuery, nsfw_enabled: bool) -> String {
         let mut url = format!("{BASE_URL}/search?q={}", query.query);
 
-        if let Some(key) = &self.api_key {
-            url.push_str(&format!("&apikey={key}"));
+        if nsfw_enabled {
+            if let Some(key) = &self.api_key {
+                url.push_str(&format!("&apikey={key}"));
+            }
         }
 
         url.push_str("&sorting=random");
 
         if query.page > 1 {
             url.push_str(&format!("&page={}", query.page));
+        }
+
+        if let Some(purity) = &query.purity {
+            url.push_str(&format!("&purity={purity}"));
+        }
+
+        if let Some(categories) = &query.categories {
+            url.push_str(&format!("&categories={categories}"));
         }
 
         if let Some(orientation) = &query.orientation {
@@ -164,7 +174,8 @@ impl ProviderAdapter for WallhavenAdapter {
         query: &'a SearchQuery,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<Wallpaper>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let url = self.build_search_url(query);
+            let nsfw_enabled = query.purity.as_ref().map(|p| p.contains('1') && p.len() == 3 && p.chars().nth(2) == Some('1')).unwrap_or(false);
+            let url = self.build_search_url(query, nsfw_enabled);
             let response = self
                 .client
                 .get(&url)

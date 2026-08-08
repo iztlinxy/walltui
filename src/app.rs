@@ -15,7 +15,7 @@ use crate::infrastructure::config_loader::AppConfig;
 use crate::providers::create_provider;
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::Screen;
-use crate::ui::screens::config::ConfigScreen;
+use crate::ui::screens::config::{ConfigField, ConfigScreen};
 use crate::ui::screens::detail::DetailScreen;
 use crate::ui::screens::download::DownloadScreen;
 use crate::ui::screens::gallery::GalleryScreen;
@@ -45,6 +45,9 @@ pub struct App {
     pub thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
     pub thumbnail_loading_id: Option<String>,
     pub download_dir: PathBuf,
+    pub config: AppConfig,
+    pub config_fields: Vec<ConfigField>,
+    pub config_selected_index: usize,
     pub config_input: String,
     pub config_cursor: usize,
     pub config_editing: bool,
@@ -94,6 +97,9 @@ impl App {
             thumbnail_tx: thumb_tx,
             thumbnail_loading_id: None,
             download_dir,
+            config: config.clone(),
+            config_fields: ConfigField::all(),
+            config_selected_index: 0,
             config_input,
             config_cursor: 0,
             config_editing: false,
@@ -256,13 +262,26 @@ impl App {
     async fn execute_search_inner(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
-            Provider::Wallhaven => config.wallhaven_api_key,
+            Provider::Wallhaven => config.wallhaven_api_key.clone(),
         };
 
+        let purity = build_purity_string(&config);
+        let categories = build_category_string(&config);
+
+        if config.purity_nsfw && api_key.is_none() {
+            self.notification = Some("NSFW requires a Wallhaven API key. Set it in Settings.".to_string());
+        }
+
         let adapter = create_provider(self.active_provider, api_key);
-        let query = SearchQuery::builder(&self.search_query)
-            .page(self.search_page)
-            .build();
+        let mut builder = SearchQuery::builder(&self.search_query)
+            .page(self.search_page);
+        if !purity.is_empty() {
+            builder = builder.purity(purity);
+        }
+        if !categories.is_empty() {
+            builder = builder.categories(categories);
+        }
+        let query = builder.build();
 
         let results = adapter.search(&query).await.map_err(|e| {
             let msg = e.to_string();
@@ -363,9 +382,48 @@ impl App {
     }
 
     pub fn start_config_edit(&mut self) {
-        self.config_editing = true;
-        self.config_input = self.download_dir.to_string_lossy().to_string();
-        self.config_cursor = self.config_input.len();
+        let field = self.config_fields[self.config_selected_index];
+        match field {
+            ConfigField::ApiKey => {
+                self.config_editing = true;
+                self.config_input = self.config.wallhaven_api_key.clone().unwrap_or_default();
+                self.config_cursor = self.config_input.len();
+            }
+            ConfigField::DownloadDir => {
+                self.config_editing = true;
+                self.config_input = self.download_dir.to_string_lossy().to_string();
+                self.config_cursor = self.config_input.len();
+            }
+            _ => {
+                self.toggle_config_field();
+            }
+        }
+    }
+
+    pub fn toggle_config_field(&mut self) {
+        let field = self.config_fields[self.config_selected_index];
+        match field {
+            ConfigField::PuritySfw => self.config.purity_sfw = !self.config.purity_sfw,
+            ConfigField::PuritySketchy => self.config.purity_sketchy = !self.config.purity_sketchy,
+            ConfigField::PurityNsfw => self.config.purity_nsfw = !self.config.purity_nsfw,
+            ConfigField::CategoryGeneral => self.config.category_general = !self.config.category_general,
+            ConfigField::CategoryAnime => self.config.category_anime = !self.config.category_anime,
+            ConfigField::CategoryPeople => self.config.category_people = !self.config.category_people,
+            _ => return,
+        }
+        self.save_config();
+    }
+
+    pub fn move_config_selection_up(&mut self) {
+        if self.config_selected_index > 0 {
+            self.config_selected_index -= 1;
+        }
+    }
+
+    pub fn move_config_selection_down(&mut self) {
+        if self.config_selected_index + 1 < self.config_fields.len() {
+            self.config_selected_index += 1;
+        }
     }
 
     pub fn handle_config_input(&mut self, c: char) {
@@ -394,32 +452,42 @@ impl App {
 
     pub fn cancel_config_edit(&mut self) {
         self.config_editing = false;
-        self.config_input = self.download_dir.to_string_lossy().to_string();
-        self.config_cursor = 0;
     }
 
-    pub fn confirm_config_download_dir(&mut self) {
-        let expanded = expand_tilde(&self.config_input);
-        if expanded.as_os_str().is_empty() {
-            self.notification = Some("Download directory cannot be empty".to_string());
-            return;
+    pub fn confirm_config_edit(&mut self) {
+        let field = self.config_fields[self.config_selected_index];
+        match field {
+            ConfigField::ApiKey => {
+                let val = if self.config_input.is_empty() { None } else { Some(self.config_input.clone()) };
+                self.config.wallhaven_api_key = val.clone();
+                self.save_config();
+                self.notification = match val {
+                    Some(_) => Some("API key saved".to_string()),
+                    None => Some("API key removed".to_string()),
+                };
+            }
+            ConfigField::DownloadDir => {
+                let expanded = expand_tilde(&self.config_input);
+                if expanded.as_os_str().is_empty() {
+                    self.notification = Some("Download directory cannot be empty".to_string());
+                    return;
+                }
+                if let Err(e) = std::fs::create_dir_all(&expanded) {
+                    self.notification = Some(format!("Failed to create directory: {e}"));
+                    return;
+                }
+                self.download_dir = expanded.clone();
+                self.config.download_dir = expanded;
+                self.save_config();
+                self.notification = Some(format!("Download dir saved: {}", self.download_dir.display()));
+            }
+            _ => {}
         }
-        if let Err(e) = std::fs::create_dir_all(&expanded) {
-            self.notification = Some(format!("Failed to create directory: {e}"));
-            return;
-        }
-        self.download_dir = expanded.clone();
         self.config_editing = false;
-        self.config_cursor = 0;
-        let mut config = AppConfig::load();
-        config.download_dir = expanded;
-        match config.save() {
-            Ok(_) => self.notification = Some(format!(
-                "Download dir saved: {}",
-                self.download_dir.display()
-            )),
-            Err(e) => self.notification = Some(format!("Failed to save config: {e}")),
-        }
+    }
+
+    fn save_config(&self) {
+        let _ = self.config.save();
     }
 
     pub fn draw(&self, frame: &mut Frame) {
@@ -460,9 +528,10 @@ impl App {
             Screen::Config => {
                 ConfigScreen::new(
                     &self.theme,
-                    &self.download_dir.to_string_lossy(),
-                    &self.config_input,
+                    &self.config,
+                    self.config_selected_index,
                     self.config_editing,
+                    &self.config_input,
                     self.config_cursor,
                 )
                 .render(frame, body_area);
@@ -599,6 +668,20 @@ fn image_to_lines(img: &DynamicImage, width: u32, height: u32) -> Vec<Line<'stat
     }
 
     lines
+}
+
+fn build_purity_string(config: &AppConfig) -> String {
+    let s = if config.purity_sfw { "1" } else { "0" };
+    let k = if config.purity_sketchy { "1" } else { "0" };
+    let n = if config.purity_nsfw { "1" } else { "0" };
+    format!("{s}{k}{n}")
+}
+
+fn build_category_string(config: &AppConfig) -> String {
+    let g = if config.category_general { "1" } else { "0" };
+    let a = if config.category_anime { "1" } else { "0" };
+    let p = if config.category_people { "1" } else { "0" };
+    format!("{g}{a}{p}")
 }
 
 impl Default for App {

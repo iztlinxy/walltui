@@ -73,6 +73,8 @@ pub struct SearchQuery {
     pub per_page: u32,
     pub orientation: Option<Orientation>,
     pub color: Option<String>,
+    pub purity: Option<String>,
+    pub categories: Option<String>,
 }
 
 impl SearchQuery {
@@ -84,6 +86,8 @@ impl SearchQuery {
             per_page: 20,
             orientation: None,
             color: None,
+            purity: None,
+            categories: None,
         }
     }
 }
@@ -95,6 +99,8 @@ pub struct SearchQueryBuilder {
     per_page: u32,
     orientation: Option<Orientation>,
     color: Option<String>,
+    purity: Option<String>,
+    categories: Option<String>,
 }
 
 impl SearchQueryBuilder {
@@ -123,6 +129,16 @@ impl SearchQueryBuilder {
         self
     }
 
+    pub fn purity(mut self, purity: impl Into<String>) -> Self {
+        self.purity = Some(purity.into());
+        self
+    }
+
+    pub fn categories(mut self, categories: impl Into<String>) -> Self {
+        self.categories = Some(categories.into());
+        self
+    }
+
     pub fn build(self) -> SearchQuery {
         SearchQuery {
             query: self.query,
@@ -131,6 +147,8 @@ impl SearchQueryBuilder {
             per_page: self.per_page,
             orientation: self.orientation,
             color: self.color,
+            purity: self.purity,
+            categories: self.categories,
         }
     }
 }
@@ -183,6 +201,8 @@ mod tests {
         assert!(query.provider.is_none());
         assert!(query.orientation.is_none());
         assert!(query.color.is_none());
+        assert!(query.purity.is_none());
+        assert!(query.categories.is_none());
     }
 
     #[test]
@@ -193,6 +213,8 @@ mod tests {
             .per_page(50)
             .orientation(Orientation::Landscape)
             .color("black")
+            .purity("110")
+            .categories("111")
             .build();
 
         assert_eq!(query.query, "city");
@@ -201,6 +223,8 @@ mod tests {
         assert_eq!(query.per_page, 50);
         assert_eq!(query.orientation, Some(Orientation::Landscape));
         assert_eq!(query.color, Some("black".to_string()));
+        assert_eq!(query.purity, Some("110".to_string()));
+        assert_eq!(query.categories, Some("111".to_string()));
     }
 
     #[test]

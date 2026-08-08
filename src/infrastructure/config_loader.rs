@@ -7,18 +7,28 @@ use crate::core::models::Provider;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub wallhaven_api_key: Option<String>,
-    pub pixiv_api_key: Option<String>,
     pub download_dir: PathBuf,
     pub default_provider: Provider,
+    pub purity_sfw: bool,
+    pub purity_sketchy: bool,
+    pub purity_nsfw: bool,
+    pub category_general: bool,
+    pub category_anime: bool,
+    pub category_people: bool,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             wallhaven_api_key: None,
-            pixiv_api_key: None,
             download_dir: dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")),
             default_provider: Provider::Wallhaven,
+            purity_sfw: true,
+            purity_sketchy: false,
+            purity_nsfw: false,
+            category_general: true,
+            category_anime: true,
+            category_people: false,
         }
     }
 }

@@ -207,9 +207,9 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
     if app.config_editing {
         match key {
             KeyCode::Esc => app.cancel_config_edit(),
-            KeyCode::Enter => app.confirm_config_download_dir(),
+            KeyCode::Enter => app.confirm_config_edit(),
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                app.confirm_config_download_dir();
+                app.confirm_config_edit();
             }
             KeyCode::Backspace => app.handle_config_backspace(),
             KeyCode::Left => app.handle_config_left(),
@@ -224,6 +224,8 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                 app.start_config_edit();
             }
+            KeyCode::Up | KeyCode::Char('k') => app.move_config_selection_up(),
+            KeyCode::Down | KeyCode::Char('j') => app.move_config_selection_down(),
             _ => {}
         }
     }
