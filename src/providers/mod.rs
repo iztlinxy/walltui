@@ -1,7 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
 
-pub mod pixiv;
 pub mod wallhaven;
 
 use crate::core::errors::AppError;
@@ -21,6 +20,5 @@ pub trait ProviderAdapter: Send + Sync {
 pub fn create_provider(provider: Provider, api_key: Option<String>) -> Box<dyn ProviderAdapter> {
     match provider {
         Provider::Wallhaven => Box::new(wallhaven::WallhavenAdapter::new(api_key)),
-        Provider::Pixiv => Box::new(pixiv::PixivAdapter::new(api_key)),
     }
 }

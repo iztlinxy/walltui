@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::core::models::{Provider, Wallpaper};
+use crate::core::models::Wallpaper;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::help_bar::HelpBar;
 use crate::ui::widgets::image_list::ImageList;
@@ -18,7 +18,6 @@ pub struct SearchScreen<'a> {
     search_focused: bool,
     selected: usize,
     wallpapers: &'a [Wallpaper],
-    active_provider: Provider,
     search_page: u32,
     thumbnail_lines: &'a [Line<'static>],
     theme: &'a Theme,
@@ -32,7 +31,6 @@ impl<'a> SearchScreen<'a> {
         search_focused: bool,
         selected: usize,
         wallpapers: &'a [Wallpaper],
-        active_provider: Provider,
         search_page: u32,
         thumbnail_lines: &'a [Line<'static>],
         theme: &'a Theme,
@@ -43,7 +41,6 @@ impl<'a> SearchScreen<'a> {
             search_focused,
             selected,
             wallpapers,
-            active_provider,
             search_page,
             thumbnail_lines,
             theme,
@@ -84,12 +81,9 @@ impl<'a> SearchScreen<'a> {
             .render(frame, chunks[1]);
         }
 
-        let provider_label = self.active_provider.to_string();
-        let provider_text = format!("Provider: {provider_label}");
         let page_text = format!("Page: {}", self.search_page);
         let help_shortcuts: Vec<(&str, &str)> = vec![
             ("/", "Search"),
-            ("1/2", &provider_text),
             ("↑/↓", "Navigate"),
             ("n/p", &page_text),
             ("Enter", "View"),

@@ -50,6 +50,8 @@ impl<'a> SplashScreen<'a> {
             Line::from(vec![
                 Span::styled("s", Style::default().fg(self.theme.secondary).bold()),
                 Span::raw(" Search  "),
+                Span::styled("g", Style::default().fg(self.theme.secondary).bold()),
+                Span::raw(" Gallery  "),
                 Span::styled("c", Style::default().fg(self.theme.secondary).bold()),
                 Span::raw(" Settings  "),
                 Span::styled("q", Style::default().fg(self.theme.error).bold()),
@@ -69,7 +71,7 @@ impl<'a> SplashScreen<'a> {
         frame.render_widget(splash, chunks[0]);
 
         let help_shortcuts: Vec<(&str, &str)> =
-            vec![("s", "Search"), ("c", "Settings"), ("q", "Quit")];
+            vec![("s", "Search"), ("g", "Gallery"), ("c", "Settings"), ("q", "Quit")];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

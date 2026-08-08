@@ -27,14 +27,12 @@ pub struct Wallpaper {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provider {
     Wallhaven,
-    Pixiv,
 }
 
 impl fmt::Display for Provider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Provider::Wallhaven => write!(f, "Wallhaven"),
-            Provider::Pixiv => write!(f, "Pixiv"),
         }
     }
 }
@@ -45,7 +43,6 @@ impl FromStr for Provider {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "wallhaven" => Ok(Provider::Wallhaven),
-            "pixiv" => Ok(Provider::Pixiv),
             other => Err(format!("unknown provider: {other}")),
         }
     }
@@ -209,7 +206,6 @@ mod tests {
     #[test]
     fn provider_display() {
         assert_eq!(format!("{}", Provider::Wallhaven), "Wallhaven");
-        assert_eq!(format!("{}", Provider::Pixiv), "Pixiv");
     }
 
     #[test]
@@ -218,7 +214,6 @@ mod tests {
             "wallhaven".parse::<Provider>().unwrap(),
             Provider::Wallhaven
         );
-        assert_eq!("PIXIV".parse::<Provider>().unwrap(), Provider::Pixiv);
         assert!("unknown".parse::<Provider>().is_err());
     }
 }
