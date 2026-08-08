@@ -36,16 +36,8 @@ impl ConfigField {
         ]
     }
 
-    pub fn is_toggle(&self) -> bool {
-        matches!(
-            self,
-            ConfigField::PuritySfw
-                | ConfigField::PuritySketchy
-                | ConfigField::PurityNsfw
-                | ConfigField::CategoryGeneral
-                | ConfigField::CategoryAnime
-                | ConfigField::CategoryPeople
-        )
+    pub fn is_editable(&self) -> bool {
+        matches!(self, ConfigField::ApiKey | ConfigField::DownloadDir)
     }
 }
 
@@ -83,41 +75,7 @@ impl<'a> ConfigScreen<'a> {
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(area);
 
-        let mut lines: Vec<Line> = vec![
-            Line::from(Span::styled(" Configuration", Style::default().fg(self.theme.primary).bold())),
-            Line::from(""),
-        ];
-
-        lines.push(section_label("API Key"));
-        let key_display = match &self.config.wallhaven_api_key {
-            Some(key) if !key.is_empty() => {
-                let masked = format!("{}...{}", &key[..4], &key[key.len().saturating_sub(4)..]);
-                Span::styled(format!("  {masked}"), Style::default().fg(self.theme.success))
-            }
-            _ => Span::styled("  (not set)", Style::default().fg(self.theme.secondary)),
-        };
-        lines.push(Line::from(key_display));
-        lines.push(Line::from(""));
-
-        lines.push(section_label("Download Directory"));
-        if self.editing && self.selected == 1 {
-            lines.push(input_line(self.input, self.cursor, self.theme));
-        } else {
-            lines.push(Line::from(format!("  {}", self.config.download_dir.display())));
-        }
-        lines.push(Line::from(""));
-
-        lines.push(section_label("Purity"));
-        lines.push(toggle_line("SFW", self.config.purity_sfw, self.theme));
-        lines.push(toggle_line("Sketchy", self.config.purity_sketchy, self.theme));
-        let nsfw_warn = self.config.purity_nsfw && self.config.wallhaven_api_key.as_ref().map_or(true, |k| k.is_empty());
-        lines.push(toggle_line_warn("NSFW", self.config.purity_nsfw, nsfw_warn, self.theme));
-        lines.push(Line::from(""));
-
-        lines.push(section_label("Categories"));
-        lines.push(toggle_line("General", self.config.category_general, self.theme));
-        lines.push(toggle_line("Anime", self.config.category_anime, self.theme));
-        lines.push(toggle_line("People", self.config.category_people, self.theme));
+        let lines: Vec<Line> = self.build_lines();
 
         let list_items: Vec<ListItem> = lines.into_iter().map(ListItem::new).collect();
         let mut state = ListState::default().with_selected(Some(self.selected));
@@ -142,67 +100,91 @@ impl<'a> ConfigScreen<'a> {
             vec![("Enter", "Confirm"), ("Esc", "Cancel"), ("Ctrl+S", "Save")]
         } else {
             vec![
-                ("Enter", "Edit / Toggle"),
+                ("Enter", "Toggle"),
                 ("↑/↓", "Navigate"),
                 ("Esc", "Back"),
             ]
         };
         HelpBar::new(&help, self.theme).render(frame, chunks[1]);
     }
-}
 
-fn section_label(text: &str) -> Line<'static> {
-    Line::from(Span::styled(
-        format!(" {text}"),
-        Style::default().fg(Color::Yellow).bold(),
-    ))
-}
-
-fn toggle_text(on: bool) -> &'static str {
-    if on { " [ON]" } else { "[OFF]" }
-}
-
-fn toggle_line(label: &str, on: bool, theme: &Theme) -> Line<'static> {
-    let style = if on {
-        Style::default().fg(theme.success)
-    } else {
-        Style::default().fg(theme.secondary)
-    };
-    Line::from(vec![
-        Span::raw(format!("  {label}")),
-        Span::styled(toggle_text(on), style),
-    ])
-}
-
-fn toggle_line_warn(label: &str, on: bool, warn: bool, theme: &Theme) -> Line<'static> {
-    let marker_style = if on {
-        Style::default().fg(theme.success)
-    } else {
-        Style::default().fg(theme.secondary)
-    };
-    let mut spans = vec![
-        Span::raw(format!("  {label}")),
-        Span::styled(toggle_text(on), marker_style),
-    ];
-    if warn {
-        spans.push(Span::styled(" (needs API key)", Style::default().fg(theme.warning)));
+    fn build_lines(&self) -> Vec<Line<'static>> {
+        vec![
+            self.api_key_line(),
+            self.download_dir_line(),
+            self.purity_line("SFW", self.config.purity_sfw, false),
+            self.purity_line("Sketchy", self.config.purity_sketchy, false),
+            self.purity_line(
+                "NSFW",
+                self.config.purity_nsfw,
+                self.config.purity_nsfw && self.config.wallhaven_api_key.as_ref().map_or(true, |k| k.is_empty()),
+            ),
+            self.category_line("General", self.config.category_general),
+            self.category_line("Anime", self.config.category_anime),
+            self.category_line("People", self.config.category_people),
+        ]
     }
-    Line::from(spans)
-}
 
-fn input_line(input: &str, cursor: usize, theme: &Theme) -> Line<'static> {
-    let before: String = input.chars().take(cursor).collect();
-    let mut iter = input.chars().skip(cursor);
-    let cursor_char = iter.next().unwrap_or(' ').to_string();
-    let after: String = iter.collect();
+    fn api_key_line(&self) -> Line<'static> {
+        let value = match &self.config.wallhaven_api_key {
+            Some(key) if !key.is_empty() => {
+                let masked = format!("{}...{}", &key[..4], &key[key.len().saturating_sub(4)..]);
+                Span::styled(masked, Style::default().fg(self.theme.success))
+            }
+            _ => Span::styled("(not set)", Style::default().fg(self.theme.secondary)),
+        };
+        Line::from(vec![
+            Span::styled("API Key:  ", Style::default().fg(Color::Yellow).bold()),
+            value,
+        ])
+    }
 
-    Line::from(vec![
-        Span::raw("> "),
-        Span::raw(before),
-        Span::styled(
-            cursor_char,
-            Style::default().bg(theme.primary).fg(theme.background),
-        ),
-        Span::raw(after),
-    ])
+    fn download_dir_line(&self) -> Line<'static> {
+        if self.editing && self.selected == 1 {
+            let before: String = self.input.chars().take(self.cursor).collect();
+            let mut iter = self.input.chars().skip(self.cursor);
+            let cursor_char = iter.next().unwrap_or(' ').to_string();
+            let after: String = iter.collect();
+            Line::from(vec![
+                Span::styled("Download:  ", Style::default().fg(Color::Yellow).bold()),
+                Span::raw("> "),
+                Span::raw(before),
+                Span::styled(cursor_char, Style::default().bg(self.theme.primary).fg(self.theme.background)),
+                Span::raw(after),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled("Download:  ", Style::default().fg(Color::Yellow).bold()),
+                Span::raw(self.config.download_dir.to_string_lossy().to_string()),
+            ])
+        }
+    }
+
+    fn purity_line(&self, label: &str, on: bool, warn: bool) -> Line<'static> {
+        let marker = if on {
+            Span::styled("[ON]", Style::default().fg(self.theme.success))
+        } else {
+            Span::styled("[OFF]", Style::default().fg(self.theme.secondary))
+        };
+        let mut spans = vec![
+            Span::styled(format!("{label}:  "), Style::default().fg(Color::Yellow).bold()),
+            marker,
+        ];
+        if warn {
+            spans.push(Span::styled(" (needs API key)", Style::default().fg(self.theme.warning)));
+        }
+        Line::from(spans)
+    }
+
+    fn category_line(&self, label: &str, on: bool) -> Line<'static> {
+        let marker = if on {
+            Span::styled("[ON]", Style::default().fg(self.theme.success))
+        } else {
+            Span::styled("[OFF]", Style::default().fg(self.theme.secondary))
+        };
+        Line::from(vec![
+            Span::styled(format!("{label}:  "), Style::default().fg(Color::Yellow).bold()),
+            marker,
+        ])
+    }
 }
