@@ -14,6 +14,15 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-action@stable
 
+      - name: Install WiX Toolset v3.11
+        run: |
+          iwr https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -OutFile wix311-binaries.zip
+          Expand-Archive -Path wix311-binaries.zip -DestinationPath $env:RUNNER_TEMP\wix311 -Force
+          "$env:RUNNER_TEMP\wix311" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
+
       - name: Build release binary
         run: cargo build --release
 
@@ -25,8 +34,18 @@ jobs:
           $size = (Get-Item target/release/walltui.exe).Length / 1MB
           if ($size -gt 5) { throw "Binary too large: $size MB" }
 
+      - name: Check signing secrets
+        id: signing
+        run: |
+          $cert = "${{ secrets.CERT_PFX_PATH }}"
+          if ($cert -ne "") {
+            echo "available=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "available=false" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Sign binary
-        if: ${{ secrets.CERT_PFX_PATH != '' }}
+        if: steps.signing.outputs.available == 'true'
         run: |
           signtool sign /f ${{ secrets.CERT_PFX_PATH }} /p ${{ secrets.CERT_PASSWORD }} /tr http://timestamp.sectigo.com /td sha256 target/release/walltui.exe
 
@@ -34,7 +53,7 @@ jobs:
         run: cargo wix --no-build
 
       - name: Sign MSI
-        if: ${{ secrets.CERT_PFX_PATH != '' }}
+        if: steps.signing.outputs.available == 'true'
         run: |
           signtool sign /f ${{ secrets.CERT_PFX_PATH }} /p ${{ secrets.CERT_PASSWORD }} /tr http://timestamp.sectigo.com target/wix/walltui-*.msi
 
@@ -49,14 +68,3 @@ jobs:
             walltui-x86_64-pc-windows-msvc.zip
             target/wix/walltui-*.msi
           draft: true
-
-  winget:
-    needs: build
-    runs-on: windows-latest
-    steps:
-      - name: Submit to WinGet
-        run: |
-          iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          $github = Get-Content '${{ github.event_path }}' | ConvertFrom-Json
-          $installerUrl = $github.release.assets | Where-Object { $_.name -match 'windows.msi' } | Select -ExpandProperty browser_download_url -First 1
-          .\wingetcreate.exe update WallTUI.WallTUI -s -v $github.release.tag_name -u $installerUrl -t ${{ secrets.WINGET_PAT }}
