@@ -53,16 +53,16 @@ winget install WallTUI.WallTUI
 
 ### MSI installer
 
-Download `walltui-x86_64-pc-windows-msvc.msi` from the [latest release](https://github.com/walltui/walltui/releases/latest) and run it. The installer adds `walltui` to your PATH.
+Download `walltui-x86_64-pc-windows-msvc.msi` from the [latest release](https://github.com/iztlinxy/walltui/releases/latest) and run it. The installer adds `walltui` to your PATH.
 
 ### Portable ZIP
 
-Download `walltui-x86_64-pc-windows-msvc.zip` from the [latest release](https://github.com/walltui/walltui/releases/latest), extract it, and run `walltui.exe`.
+Download `walltui-x86_64-pc-windows-msvc.zip` from the [latest release](https://github.com/iztlinxy/walltui/releases/latest), extract it, and run `walltui.exe`.
 
 ### PowerShell one-liner
 
 ```powershell
-iwr https://github.com/walltui/walltui/releases/latest/download/walltui-installer.ps1 -OutFile walltui-installer.ps1; .\walltui-installer.ps1
+iwr https://github.com/iztlinxy/walltui/releases/latest/download/walltui-installer.ps1 -OutFile walltui-installer.ps1; .\walltui-installer.ps1
 ```
 
 ### Build from source

@@ -4,7 +4,7 @@ version = "1.1.0"
 description = "Terminal Wallpaper Manager"
 authors = ["WallTUI"]
 license = "MIT"
-repository = "https://github.com/walltui/walltui"
+repository = "https://github.com/iztlinxy/walltui"
 edition = "2024"
 
 [package.metadata.wix]
