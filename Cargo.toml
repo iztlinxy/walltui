@@ -1,10 +1,17 @@
 [package]
 name = "walltui"
 version = "1.1.0"
-description = "A Ratatui Hello World app"
-authors = ["Josh McKinney <joshka@users.noreply.github.com>"]
+description = "Terminal Wallpaper Manager"
+authors = ["WallTUI"]
 license = "MIT"
+repository = "https://github.com/walltui/walltui"
 edition = "2024"
+
+[package.metadata.wix]
+upgrade-guid = "B37F4A49-461F-4D91-9735-74EC55E1DCAC"
+path-guid = "E617E50C-6A48-42EF-8015-F8CF61FF4C0A"
+license = false
+eula = false
 
 [dependencies]
 color-eyre = { version = "0.6.3", default-features = false }
@@ -36,3 +43,8 @@ lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -61,7 +61,7 @@
     <Product
         Id='*'
         Name='WallTUI'
-        UpgradeCode='5EEF6B56-54FB-4820-8C96-7F666BC01272'
+        UpgradeCode='B37F4A49-461F-4D91-9735-74EC55E1DCAC'
         Manufacturer='WallTUI'
         Language='1033'
         Codepage='1252'
@@ -88,22 +88,29 @@
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
                 <Directory Id='APPLICATIONFOLDER' Name='WallTUI'>
-                    <!--
-                      Disabling the license sidecar file in the installer is a two step process:
-
-                      1. Comment out or remove the `Component` tag along with its contents.
-                      2. Comment out or remove the `ComponentRef` tag with the "License" Id
-                         attribute value further down in this file.
-                    -->
-                    <Component Id='License' Guid='*'>
-                        <File Id='LicenseFile'
-                            DiskId='1'
-                            Source='wix\License.rtf'
-                            KeyPath='yes'/>
-                    </Component>
                     
+                    <!--
+                      Enabling the license sidecar file in the installer is a four step process:
+
+                      1. Uncomment the `Component` tag and its contents.
+                      2. Change the value for the `Source` attribute in the `File` tag to a path
+                         to the file that should be included as the license sidecar file. The path
+                         can, and probably should be, relative to this file.
+                      3. Change the value for the `Name` attribute in the `File` tag to the
+                         desired name for the file when it is installed alongside the `bin` folder
+                         in the installation directory. This can be omitted if the desired name is
+                         the same as the file name.
+                      4. Uncomment the `ComponentRef` tag with the Id attribute value of "License"
+                         further down in this file.
+                    -->
+                    <!--
+                    <Component Id='License' Guid='*'>
+                        <File Id='LicenseFile' Name='ChangeMe' DiskId='1' Source='C:\Path\To\File' KeyPath='yes'/>
+                    </Component>
+                    -->
+
                     <Directory Id='Bin' Name='bin'>
-                        <Component Id='Path' Guid='31FC05E3-73A1-43CA-8695-37067198B0A6' KeyPath='yes'>
+                        <Component Id='Path' Guid='E617E50C-6A48-42EF-8015-F8CF61FF4C0A' KeyPath='yes'>
                             <Environment
                                 Id='PATH'
                                 Name='PATH'
@@ -135,12 +142,13 @@
             AllowAdvertise='no'
             Display='expand'
             Absent='disallow'>
-            <!--
-              Comment out or remove the following `ComponentRef` tag to remove
-              the license sidecar file from the installer.
-            -->
-            <ComponentRef Id='License'/>
             
+            <!--
+              Uncomment the following `ComponentRef` tag to add the license
+              sidecar file to the installer.
+            -->
+            <!--<ComponentRef Id='License'/>-->
+
             <ComponentRef Id='binary0'/>
 
             <Feature
@@ -165,38 +173,34 @@
         <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
         <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
 
-        
-        <!--
-          Adding a URL to Add/Remove Programs control panel listing for the
-          application is a two step process:
-
-          1. Uncomment the following `Property` tag with the "ARPHELPLINK" Id
-             attribute value.
-          2. Change the value for `Value` attribute of the following
-             `Property` tag to a valid URL.
-        -->
         <Property Id='ARPHELPLINK' Value='https://github.com/walltui/walltui'/>
-
+        
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>
-            <!--
-              Disabling the EULA dialog in the installer is a two step process:
-
-                 1. Uncomment the following two `Publish` tags
-                 2. Comment out or remove the `<WiXVariable Id='WixUILicenseRtf'...` tag further down
-
-            -->
-            <!--<Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='CustomizeDlg' Order='99'>1</Publish>-->
-            <!--<Publish Dialog='CustomizeDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg' Order='99'>1</Publish>-->
             
+            <!--
+              Enabling the EULA dialog in the installer is a three step process:
+
+                1. Comment out or remove the two `Publish` tags that follow the
+                   `WixVariable` tag.
+                2. Uncomment the `<WixVariable Id='WixUILicenseRtf' Value='Path\to\Eula.rft'>` tag further down
+                3. Replace the `Value` attribute of the `WixVariable` tag with
+                   the path to a RTF file that will be used as the EULA and
+                   displayed in the license agreement dialog.
+            -->
+            <Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='CustomizeDlg' Order='99'>1</Publish>
+            <Publish Dialog='CustomizeDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg' Order='99'>1</Publish>
+
         </UI>
 
-        <!--
-          Disabling the EULA dialog in the installer requires commenting out
-          or removing the following `WixVariable` tag
-        -->
-        <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf'/>
         
+        <!--
+          Enabling the EULA dialog in the installer requires uncommenting
+          the following `WixUILicenseRTF` tag and changing the `Value`
+          attribute.
+        -->
+        <!-- <WixVariable Id='WixUILicenseRtf' Value='Relative\Path\to\Eula.rtf'/> -->
+
         
         <!--
           Uncomment the next `WixVariable` tag to customize the installer's
