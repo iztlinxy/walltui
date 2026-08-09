@@ -12,6 +12,7 @@ fn release_exe() -> PathBuf {
 }
 
 #[test]
+#[ignore = "requires release binary built locally; run with --include-ignored"]
 fn binary_size_under_limit() {
     let exe = release_exe();
     let metadata = std::fs::metadata(&exe).unwrap_or_else(|e| {
@@ -22,6 +23,7 @@ fn binary_size_under_limit() {
 }
 
 #[test]
+#[ignore = "requires release binary built locally; run with --include-ignored"]
 fn startup_time_under_limit() {
     let exe = release_exe();
     let start = Instant::now();
