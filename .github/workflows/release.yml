@@ -5,6 +5,9 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -34,37 +37,17 @@ jobs:
           $size = (Get-Item target/release/walltui.exe).Length / 1MB
           if ($size -gt 5) { throw "Binary too large: $size MB" }
 
-      - name: Check signing secrets
-        id: signing
-        run: |
-          $cert = "${{ secrets.CERT_PFX_PATH }}"
-          if ($cert -ne "") {
-            echo "available=true" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "available=false" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Sign binary
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          signtool sign /f ${{ secrets.CERT_PFX_PATH }} /p ${{ secrets.CERT_PASSWORD }} /tr http://timestamp.sectigo.com /td sha256 target/release/walltui.exe
-
       - name: Build MSI with cargo-wix
         run: cargo wix --no-build
-
-      - name: Sign MSI
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          signtool sign /f ${{ secrets.CERT_PFX_PATH }} /p ${{ secrets.CERT_PASSWORD }} /tr http://timestamp.sectigo.com target/wix/walltui-*.msi
 
       - name: Create portable ZIP
         run: |
           Compress-Archive -Path target/release/walltui.exe -DestinationPath walltui-x86_64-pc-windows-msvc.zip
 
-      - name: Upload to GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             walltui-x86_64-pc-windows-msvc.zip
             target/wix/walltui-*.msi
-          draft: true
+          draft: false
