@@ -44,7 +44,7 @@ impl<'a> SplashScreen<'a> {
             .centered(),
         );
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::raw("v1.0.0")).centered());
+        lines.push(Line::from(Span::raw("v1.1.0")).centered());
         lines.push(Line::from(""));
         lines.push(
             Line::from(vec![
