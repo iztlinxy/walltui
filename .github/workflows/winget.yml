@@ -1,0 +1,18 @@
+name: Submit to WinGet
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    steps:
+      - name: Download wingetcreate
+        run: iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+
+      - name: Submit to WinGet
+        run: |
+          $github = Get-Content '${{ github.event_path }}' | ConvertFrom-Json
+          $installerUrl = $github.release.assets | Where-Object { $_.name -match 'windows.msi' } | Select -ExpandProperty browser_download_url -First 1
+          .\wingetcreate.exe update WallTUI.WallTUI -s -v $github.release.tag_name -u $installerUrl -t ${{ secrets.WINGET_PAT }}
