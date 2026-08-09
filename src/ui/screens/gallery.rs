@@ -78,6 +78,7 @@ impl<'a> GalleryScreen<'a> {
         let help_shortcuts: Vec<(&str, &str)> = vec![
             ("↑/↓", "Navigate"),
             ("Enter", "Open"),
+            ("w", "Set wallpaper"),
             ("r", "Reload"),
             ("Esc", "Back"),
         ];

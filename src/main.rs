@@ -242,6 +242,15 @@ async fn handle_gallery_event(app: &mut App, key: KeyCode) {
                 let _ = open::that(&wallpaper.url);
             }
         }
+        KeyCode::Char('w') => {
+            if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
+                let path = std::path::Path::new(&wallpaper.url);
+                match walltui::platform::set_wallpaper(path) {
+                    Ok(()) => app.notification = Some("Wallpaper set successfully".to_string()),
+                    Err(e) => app.notification = Some(format!("Failed to set wallpaper: {e}")),
+                }
+            }
+        }
         _ => {}
     }
 }
