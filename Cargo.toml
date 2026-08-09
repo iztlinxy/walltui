@@ -27,6 +27,7 @@ tracing-appender = "0.2"
 futures-util = "0.3"
 dirs = "6"
 open = "5"
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [patch.crates-io]

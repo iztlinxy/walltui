@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
-use tracing::info;
+use sysinfo::System;
+use tracing::{info, warn};
 
 use walltui::app::App;
 use walltui::core::models::Provider;
@@ -16,12 +17,31 @@ async fn main() -> color_eyre::Result<()> {
     init_panic_hook();
 
     info!("WallTUI starting");
+    log_memory("startup");
+
+    if std::env::var("WALLTUI_HEADLESS").is_ok() {
+        let start = Instant::now();
+        let mut app = App::new();
+        app.tick().await;
+        app.quit();
+        info!("Headless startup time: {:?}", start.elapsed());
+        return Ok(());
+    }
 
     let mut terminal = ratatui::init();
     let result = run(&mut terminal).await;
     ratatui::restore();
     info!("WallTUI exiting");
     result
+}
+
+fn log_memory(label: &str) {
+    let mut system = System::new_all();
+    system.refresh_all();
+    if let Some(process) = system.process(sysinfo::get_current_pid().unwrap_or_else(|_| panic!("current process"))) {
+        let mb = process.memory() as f64 / 1_048_576.0;
+        info!("Memory [{label}]: {mb:.2} MB");
+    }
 }
 
 fn init_logging() -> color_eyre::Result<tracing_appender::non_blocking::WorkerGuard> {
@@ -49,7 +69,12 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     let mut app = App::new();
 
     while !app.should_quit {
+        let frame_start = Instant::now();
         terminal.draw(|frame| app.draw(frame))?;
+        let frame_time = frame_start.elapsed();
+        if frame_time > Duration::from_millis(16) {
+            warn!("Slow frame: {:?}", frame_time);
+        }
 
         if event::poll(Duration::from_millis(50))? {
             let event = event::read()?;
@@ -114,6 +139,7 @@ async fn handle_search_event(app: &mut App, key: KeyCode, _modifiers: KeyModifie
                 app.search_focused = false;
                 app.reset_search_page();
                 app.execute_search().await;
+                log_memory("after_search");
             }
             KeyCode::Backspace => {
                 app.handle_search_backspace();

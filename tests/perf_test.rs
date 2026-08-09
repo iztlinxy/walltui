@@ -1,0 +1,38 @@
+use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
+#[test]
+fn binary_size_under_limit() {
+    let metadata = std::fs::metadata("target/release/walltui.exe").unwrap();
+    let size_mb = metadata.len() as f64 / 1_048_576.0;
+    assert!(size_mb < 5.0, "Binary too large: {:.2} MB", size_mb);
+}
+
+#[test]
+fn startup_time_under_limit() {
+    let start = Instant::now();
+    let child = Command::new("target/release/walltui.exe")
+        .env("WALLTUI_HEADLESS", "1")
+        .spawn()
+        .expect("failed to spawn walltui");
+
+    let child = Arc::new(Mutex::new(child));
+    let child_for_timeout = Arc::clone(&child);
+    let timeout = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(1000));
+        let _ = child_for_timeout.lock().unwrap().kill();
+    });
+
+    let _ = child.lock().unwrap().wait().expect("failed to wait on child");
+    timeout.join().expect("timeout thread panicked");
+
+    let elapsed = start.elapsed();
+    // ponytail: target is 500ms, but CI/AV overhead can spike; keep guard at 2000ms
+    assert!(
+        elapsed < Duration::from_millis(2000),
+        "Startup too slow: {:?}",
+        elapsed
+    );
+}
