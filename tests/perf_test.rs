@@ -1,19 +1,31 @@
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn release_exe() -> PathBuf {
+    PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("release")
+        .join("walltui.exe")
+}
+
 #[test]
 fn binary_size_under_limit() {
-    let metadata = std::fs::metadata("target/release/walltui.exe").unwrap();
+    let exe = release_exe();
+    let metadata = std::fs::metadata(&exe).unwrap_or_else(|e| {
+        panic!("failed to stat {}: {e}", exe.display());
+    });
     let size_mb = metadata.len() as f64 / 1_048_576.0;
     assert!(size_mb < 5.0, "Binary too large: {:.2} MB", size_mb);
 }
 
 #[test]
 fn startup_time_under_limit() {
+    let exe = release_exe();
     let start = Instant::now();
-    let child = Command::new("target/release/walltui.exe")
+    let child = Command::new(&exe)
         .env("WALLTUI_HEADLESS", "1")
         .spawn()
         .expect("failed to spawn walltui");
