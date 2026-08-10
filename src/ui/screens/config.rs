@@ -1,13 +1,13 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState},
 };
 
 use crate::infrastructure::config_loader::AppConfig;
-use crate::ui::theme::Theme;
+use crate::ui::theme::{StyleKey, Theme};
 use crate::ui::widgets::help_bar::HelpBar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +48,8 @@ pub struct ConfigScreen<'a> {
     editing: bool,
     input: &'a str,
     cursor: usize,
+    cursor_visible: bool,
+    cursor_style: &'a str,
 }
 
 impl<'a> ConfigScreen<'a> {
@@ -58,6 +60,8 @@ impl<'a> ConfigScreen<'a> {
         editing: bool,
         input: &'a str,
         cursor: usize,
+        cursor_visible: bool,
+        cursor_style: &'a str,
     ) -> Self {
         Self {
             theme,
@@ -66,6 +70,8 @@ impl<'a> ConfigScreen<'a> {
             editing,
             input,
             cursor,
+            cursor_visible,
+            cursor_style,
         }
     }
 
@@ -84,12 +90,12 @@ impl<'a> ConfigScreen<'a> {
                 Block::default()
                     .title(" Settings ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(self.theme.primary)),
+                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
             )
             .highlight_style(
                 Style::default()
-                    .bg(self.theme.primary)
-                    .fg(self.theme.background)
+                    .bg(self.theme.bg_selected)
+                    .fg(self.theme.fg_primary)
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("▶ ");
@@ -129,12 +135,12 @@ impl<'a> ConfigScreen<'a> {
         let value = match &self.config.wallhaven_api_key {
             Some(key) if !key.is_empty() => {
                 let masked = format!("{}...{}", &key[..4], &key[key.len().saturating_sub(4)..]);
-                Span::styled(masked, Style::default().fg(self.theme.success))
+                Span::styled(masked, self.theme.resolve(StyleKey::Success))
             }
-            _ => Span::styled("(not set)", Style::default().fg(self.theme.secondary)),
+            _ => Span::styled("(not set)", self.theme.resolve(StyleKey::Secondary)),
         };
         Line::from(vec![
-            Span::styled("API Key:  ", Style::default().fg(Color::Yellow).bold()),
+            Span::styled("API Key:  ", self.theme.resolve(StyleKey::Title)),
             value,
         ])
     }
@@ -142,19 +148,43 @@ impl<'a> ConfigScreen<'a> {
     fn download_dir_line(&self) -> Line<'static> {
         if self.editing && self.selected == 1 {
             let before: String = self.input.chars().take(self.cursor).collect();
-            let mut iter = self.input.chars().skip(self.cursor);
-            let cursor_char = iter.next().unwrap_or(' ').to_string();
-            let after: String = iter.collect();
+            let iter = self.input.chars().skip(self.cursor);
+            let rest: String = iter.collect();
+            let cursor_str = if self.cursor_visible {
+                match self.cursor_style {
+                    "line" => "▏".to_string(),
+                    "underline" => "_".to_string(),
+                    _ => "█".to_string(),
+                }
+            } else {
+                String::new()
+            };
+            let (cursor_char, after) = if cursor_str.is_empty() {
+                (String::new(), rest)
+            } else {
+                let mut chars = rest.chars();
+                let current = chars.next().unwrap_or(' ').to_string();
+                let after: String = chars.collect();
+                (current, after)
+            };
             Line::from(vec![
-                Span::styled("Download:  ", Style::default().fg(Color::Yellow).bold()),
+                Span::styled("Download:  ", self.theme.resolve(StyleKey::Title)),
                 Span::raw("> "),
                 Span::raw(before),
-                Span::styled(cursor_char, Style::default().bg(self.theme.primary).fg(self.theme.background)),
+                Span::styled(
+                    cursor_char,
+                    if self.cursor_visible {
+                        self.theme.resolve(StyleKey::Cursor)
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::raw(cursor_str),
                 Span::raw(after),
             ])
         } else {
             Line::from(vec![
-                Span::styled("Download:  ", Style::default().fg(Color::Yellow).bold()),
+                Span::styled("Download:  ", self.theme.resolve(StyleKey::Title)),
                 Span::raw(self.config.download_dir.to_string_lossy().to_string()),
             ])
         }
@@ -162,28 +192,31 @@ impl<'a> ConfigScreen<'a> {
 
     fn purity_line(&self, label: &str, on: bool, warn: bool) -> Line<'static> {
         let marker = if on {
-            Span::styled("[ON]", Style::default().fg(self.theme.success))
+            Span::styled("[ON]", self.theme.resolve(StyleKey::Success))
         } else {
-            Span::styled("[OFF]", Style::default().fg(self.theme.secondary))
+            Span::styled("[OFF]", self.theme.resolve(StyleKey::Secondary))
         };
         let mut spans = vec![
-            Span::styled(format!("{label}:  "), Style::default().fg(Color::Yellow).bold()),
+            Span::styled(format!("{label}:  "), self.theme.resolve(StyleKey::Title)),
             marker,
         ];
         if warn {
-            spans.push(Span::styled(" (needs API key)", Style::default().fg(self.theme.warning)));
+            spans.push(Span::styled(
+                " (needs API key)",
+                self.theme.resolve(StyleKey::Warning),
+            ));
         }
         Line::from(spans)
     }
 
     fn category_line(&self, label: &str, on: bool) -> Line<'static> {
         let marker = if on {
-            Span::styled("[ON]", Style::default().fg(self.theme.success))
+            Span::styled("[ON]", self.theme.resolve(StyleKey::Success))
         } else {
-            Span::styled("[OFF]", Style::default().fg(self.theme.secondary))
+            Span::styled("[OFF]", self.theme.resolve(StyleKey::Secondary))
         };
         Line::from(vec![
-            Span::styled(format!("{label}:  "), Style::default().fg(Color::Yellow).bold()),
+            Span::styled(format!("{label}:  "), self.theme.resolve(StyleKey::Title)),
             marker,
         ])
     }

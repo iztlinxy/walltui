@@ -1,7 +1,6 @@
 use ratatui::{
     Frame,
     layout::Rect,
-    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
@@ -12,32 +11,52 @@ pub struct SearchBar<'a> {
     query: &'a str,
     cursor_pos: usize,
     focused: bool,
+    cursor_visible: bool,
+    cursor_style: &'a str,
     theme: &'a Theme,
 }
 
 impl<'a> SearchBar<'a> {
-    pub fn new(query: &'a str, cursor_pos: usize, focused: bool, theme: &'a Theme) -> Self {
+    pub fn new(
+        query: &'a str,
+        cursor_pos: usize,
+        focused: bool,
+        cursor_visible: bool,
+        cursor_style: &'a str,
+        theme: &'a Theme,
+    ) -> Self {
         Self {
             query,
             cursor_pos,
             focused,
+            cursor_visible,
+            cursor_style,
             theme,
         }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
+        use crate::ui::theme::StyleKey;
         let border_style = if self.focused {
-            Style::default().fg(self.theme.primary)
+            self.theme.resolve(StyleKey::BorderFocused)
         } else {
-            Style::default().fg(self.theme.secondary)
+            self.theme.resolve(StyleKey::Border)
         };
 
-        let cursor = if self.focused { "▌" } else { "" };
+        let cursor = if self.focused && self.cursor_visible {
+            match self.cursor_style {
+                "line" => "▏",
+                "underline" => "_",
+                _ => "█",
+            }
+        } else {
+            ""
+        };
         let (before, after) = self.query.split_at(self.cursor_pos.min(self.query.len()));
 
         let input_line = Line::from(vec![
             Span::raw(before),
-            Span::styled(cursor, Style::default().fg(self.theme.foreground)),
+            Span::styled(cursor, self.theme.resolve(StyleKey::Cursor)),
             Span::raw(after),
         ]);
 

@@ -13,14 +13,21 @@ pub struct AppLayout<'a> {
     theme: &'a Theme,
     active_screen: Screen,
     active_provider: &'a str,
+    toast: Option<&'a str>,
 }
 
 impl<'a> AppLayout<'a> {
-    pub fn new(theme: &'a Theme, active_screen: Screen, active_provider: &'a str) -> Self {
+    pub fn new(
+        theme: &'a Theme,
+        active_screen: Screen,
+        active_provider: &'a str,
+        toast: Option<&'a str>,
+    ) -> Self {
         Self {
             theme,
             active_screen,
             active_provider,
+            toast,
         }
     }
 
@@ -59,18 +66,23 @@ impl<'a> AppLayout<'a> {
             Screen::ResolutionSelect => "Resolution",
         };
         let footer_text = format!(" {screen_name} ");
-        let footer = Paragraph::new(Line::from(vec![
+        let mut footer_spans = vec![
             Span::styled(&footer_text, Style::default().fg(self.theme.foreground)),
             Span::raw(" | "),
             Span::styled(" ? help ", Style::default().fg(self.theme.secondary)),
             Span::raw(" | "),
             Span::styled(" q quit ", Style::default().fg(self.theme.error)),
-        ]))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(self.theme.primary)),
-        );
+        ];
+        if let Some(toast) = self.toast {
+            footer_spans.push(Span::raw(" | "));
+            footer_spans.push(Span::styled(toast, Style::default().fg(self.theme.success)));
+        }
+        let footer = Paragraph::new(Line::from(footer_spans))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            );
         frame.render_widget(footer, chunks[2]);
 
         chunks[1]

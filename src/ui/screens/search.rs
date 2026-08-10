@@ -16,6 +16,8 @@ pub struct SearchScreen<'a> {
     query: &'a str,
     cursor_pos: usize,
     search_focused: bool,
+    cursor_visible: bool,
+    cursor_style: &'a str,
     selected: usize,
     wallpapers: &'a [Wallpaper],
     search_page: u32,
@@ -29,6 +31,8 @@ impl<'a> SearchScreen<'a> {
         query: &'a str,
         cursor_pos: usize,
         search_focused: bool,
+        cursor_visible: bool,
+        cursor_style: &'a str,
         selected: usize,
         wallpapers: &'a [Wallpaper],
         search_page: u32,
@@ -39,6 +43,8 @@ impl<'a> SearchScreen<'a> {
             query,
             cursor_pos,
             search_focused,
+            cursor_visible,
+            cursor_style,
             selected,
             wallpapers,
             search_page,
@@ -57,8 +63,15 @@ impl<'a> SearchScreen<'a> {
             ])
             .split(area);
 
-        SearchBar::new(self.query, self.cursor_pos, self.search_focused, self.theme)
-            .render(frame, chunks[0]);
+        SearchBar::new(
+            self.query,
+            self.cursor_pos,
+            self.search_focused,
+            self.cursor_visible,
+            self.cursor_style,
+            self.theme,
+        )
+        .render(frame, chunks[0]);
 
         if self.wallpapers.is_empty() {
             let empty = Paragraph::new(Line::from(Span::styled(

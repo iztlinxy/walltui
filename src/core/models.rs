@@ -153,6 +153,29 @@ impl SearchQueryBuilder {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GalleryEntry {
+    pub wallpaper: Wallpaper,
+    pub custom_name: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub date_added: u64,
+    #[serde(default)]
+    pub date_modified: u64,
+}
+
+impl GalleryEntry {
+    pub fn display_name(&self) -> &str {
+        self.custom_name
+            .as_deref()
+            .or_else(|| Some(self.wallpaper.title.as_str()))
+            .unwrap_or(&self.wallpaper.id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

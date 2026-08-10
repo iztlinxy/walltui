@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use image::{DynamicImage, GenericImageView};
 use ratatui::{
@@ -12,6 +13,7 @@ use tokio::sync::mpsc;
 use crate::core::download::{DownloadEvent, DownloadManager, DownloadTask, generate_filename};
 use crate::core::models::{Provider, SearchQuery, Wallpaper};
 use crate::infrastructure::config_loader::AppConfig;
+use crate::infrastructure::gallery_index::GalleryIndex;
 use crate::providers::create_provider;
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::Screen;
@@ -23,6 +25,9 @@ use crate::ui::screens::resolution_select::{ResolutionOption, ResolutionSelectSc
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
 use crate::ui::theme::Theme;
+use crate::ui::theme_loader::ThemeLoader;
+use crate::ui::widgets::dialog::ConfirmDialog;
+use crate::ui::widgets::toast::ToastManager;
 
 pub struct App {
     pub should_quit: bool,
@@ -61,6 +66,18 @@ pub struct App {
     pub pending_download_wallpaper: Option<Wallpaper>,
     pub resolution_selected_index: usize,
     pub resolution_options: Vec<ResolutionOption>,
+    // UI polish state
+    pub cursor_visible: bool,
+    pub last_blink: Instant,
+    pub toast_manager: ToastManager,
+    pub recent_downloads: Vec<String>,
+    pub confirm_dialog: Option<ConfirmDialog>,
+    // Gallery rename / metadata
+    pub gallery_index: GalleryIndex,
+    pub gallery_editing: bool,
+    pub gallery_edit_input: String,
+    pub gallery_edit_cursor: usize,
+    pub gallery_cursor_visible: bool,
 }
 
 impl App {
@@ -72,9 +89,10 @@ impl App {
         manager.start_worker(tx);
 
         let config = AppConfig::load();
-        let theme = Theme::default();
+        let theme = ThemeLoader::load(&config.theme_name);
         let download_dir = config.download_dir.clone();
         let config_input = download_dir.to_string_lossy().to_string();
+        let gallery_index = GalleryIndex::load();
 
         Self {
             should_quit: false,
@@ -113,10 +131,30 @@ impl App {
             pending_download_wallpaper: None,
             resolution_selected_index: 0,
             resolution_options: ResolutionOption::presets(),
+            cursor_visible: true,
+            last_blink: Instant::now(),
+            toast_manager: ToastManager::default(),
+            recent_downloads: Vec::new(),
+            confirm_dialog: None,
+            gallery_index,
+            gallery_editing: false,
+            gallery_edit_input: String::new(),
+            gallery_edit_cursor: 0,
+            gallery_cursor_visible: true,
         }
     }
 
     pub async fn tick(&mut self) {
+        // Cursor blink tick (530ms default).
+        if self.last_blink.elapsed() >= self.theme.cursor_blink_interval() {
+            self.cursor_visible = !self.cursor_visible;
+            self.gallery_cursor_visible = !self.gallery_cursor_visible;
+            self.last_blink = Instant::now();
+        }
+
+        // Toast auto-dismiss.
+        self.toast_manager.tick();
+
         while let Ok(event) = self.download_rx.try_recv() {
             match event {
                 DownloadEvent::Progress(idx, progress) => {
@@ -128,6 +166,8 @@ impl App {
                     if let Some(task) = self.download_tasks.get(idx) {
                         let title = task.wallpaper.title.clone();
                         self.notification = Some(format!("Downloaded: {title}"));
+                        self.toast_manager.show(format!("Downloaded: {title}"));
+                        self.add_recent_download(&title);
                     }
                 }
             }
@@ -191,6 +231,14 @@ impl App {
         self.should_quit = true;
     }
 
+    fn add_recent_download(&mut self, title: &str) {
+        self.recent_downloads.retain(|t| t != title);
+        self.recent_downloads.insert(0, title.to_string());
+        if self.recent_downloads.len() > 5 {
+            self.recent_downloads.pop();
+        }
+    }
+
     pub fn navigate_to(&mut self, screen: Screen) {
         self.previous_screen = Some(self.current_screen);
         self.current_screen = screen;
@@ -207,6 +255,14 @@ impl App {
 
     pub fn switch_provider(&mut self, provider: Provider) {
         self.active_provider = provider;
+    }
+
+    pub fn cycle_theme(&mut self) {
+        let next = crate::ui::theme::cycle_theme_name(&self.config.theme_name);
+        self.config.theme_name = next.to_string();
+        self.theme = ThemeLoader::load(next);
+        let _ = self.config.save();
+        self.toast_manager.show(format!("Theme: {next}"));
     }
 
     pub fn handle_search_input(&mut self, c: char) {
@@ -364,6 +420,9 @@ impl App {
 
     pub fn load_gallery(&mut self) {
         self.gallery_wallpapers = scan_local_wallpapers(&self.download_dir);
+        for wp in &mut self.gallery_wallpapers {
+            wp.title = self.gallery_index.display_name(wp);
+        }
         self.gallery_selected_index = 0;
         self.gallery_thumbnail_lines = Vec::new();
         self.gallery_thumbnail_loading_id = None;
@@ -379,6 +438,107 @@ impl App {
         if self.gallery_selected_index + 1 < self.gallery_wallpapers.len() {
             self.gallery_selected_index += 1;
         }
+    }
+
+    pub fn start_gallery_rename(&mut self) {
+        if let Some(wp) = self.gallery_wallpapers.get(self.gallery_selected_index) {
+            self.gallery_editing = true;
+            self.gallery_edit_input = self.gallery_index.display_name(wp).to_string();
+            self.gallery_edit_cursor = self.gallery_edit_input.len();
+        }
+    }
+
+    pub fn cancel_gallery_rename(&mut self) {
+        self.gallery_editing = false;
+        self.gallery_edit_input.clear();
+        self.gallery_edit_cursor = 0;
+    }
+
+    pub fn handle_gallery_edit_input(&mut self, c: char) {
+        self.gallery_edit_input.insert(self.gallery_edit_cursor, c);
+        self.gallery_edit_cursor += 1;
+    }
+
+    pub fn handle_gallery_edit_backspace(&mut self) {
+        if self.gallery_edit_cursor > 0 {
+            self.gallery_edit_cursor -= 1;
+            self.gallery_edit_input.remove(self.gallery_edit_cursor);
+        }
+    }
+
+    pub fn handle_gallery_edit_left(&mut self) {
+        if self.gallery_edit_cursor > 0 {
+            self.gallery_edit_cursor -= 1;
+        }
+    }
+
+    pub fn handle_gallery_edit_right(&mut self) {
+        if self.gallery_edit_cursor < self.gallery_edit_input.len() {
+            self.gallery_edit_cursor += 1;
+        }
+    }
+
+    pub fn prompt_delete_gallery_selected(&mut self) {
+        if let Some(wp) = self.gallery_wallpapers.get(self.gallery_selected_index) {
+            self.confirm_dialog = Some(crate::ui::widgets::dialog::ConfirmDialog::new(
+                format!("Delete '{}' ?", wp.title),
+                crate::ui::widgets::dialog::ConfirmAction::DeleteGalleryItem,
+            ));
+        }
+    }
+
+    pub fn confirm_gallery_delete(&mut self) {
+        if self.gallery_selected_index >= self.gallery_wallpapers.len() {
+            return;
+        }
+        let wp = self.gallery_wallpapers[self.gallery_selected_index].clone();
+        let path = PathBuf::from(&wp.url);
+        if let Err(e) = std::fs::remove_file(&path) {
+            self.toast_manager.show(format!("Delete failed: {e}"));
+        } else {
+            self.gallery_index.entries.remove(&wp.id);
+            let _ = self.gallery_index.save();
+            self.toast_manager.show(format!("Deleted: {}", wp.title));
+        }
+        self.confirm_dialog = None;
+        self.load_gallery();
+    }
+
+    pub fn confirm_gallery_rename(&mut self) {
+        let Some(wp) = self.gallery_wallpapers.get(self.gallery_selected_index).cloned() else {
+            return;
+        };
+        let new_name = self.gallery_edit_input.trim();
+        if new_name.is_empty() {
+            self.toast_manager.show("Rename cancelled: empty name");
+            self.cancel_gallery_rename();
+            return;
+        }
+        let old_path = PathBuf::from(&wp.url);
+        let Some(ext) = old_path.extension().and_then(|e| e.to_str()) else {
+            self.toast_manager.show("Rename failed: no extension");
+            self.cancel_gallery_rename();
+            return;
+        };
+        let new_filename = format!("{new_name}.{ext}");
+        let new_path = old_path.with_file_name(&new_filename);
+        if new_path.exists() {
+            self.toast_manager.show("Rename failed: name already exists");
+            self.cancel_gallery_rename();
+            return;
+        }
+        if let Err(e) = std::fs::rename(&old_path, &new_path) {
+            self.toast_manager.show(format!("Rename failed: {e}"));
+            self.cancel_gallery_rename();
+            return;
+        }
+        if let Err(e) = self.gallery_index.rename(&wp.id, &new_filename, new_path) {
+            self.toast_manager.show(format!("Index update failed: {e}"));
+        } else {
+            self.toast_manager.show(format!("Renamed to '{new_filename}'"));
+        }
+        self.cancel_gallery_rename();
+        self.load_gallery();
     }
 
     pub fn start_config_edit(&mut self) {
@@ -491,22 +651,30 @@ impl App {
     }
 
     pub fn draw(&self, frame: &mut Frame) {
+        let toast = self
+            .toast_manager
+            .message()
+            .or(self.notification.as_deref());
         let body_area = AppLayout::new(
             &self.theme,
             self.current_screen,
             &self.active_provider.to_string(),
+            toast,
         )
         .render(frame);
 
         match self.current_screen {
             Screen::Splash => {
-                SplashScreen::new(&self.theme).render(frame, body_area);
+                SplashScreen::new(&self.theme, &self.recent_downloads)
+                    .render(frame, body_area);
             }
             Screen::Search => {
                 SearchScreen::new(
                     &self.search_query,
                     self.cursor_pos,
                     self.search_focused,
+                    self.cursor_visible,
+                    &self.config.cursor_style,
                     self.selected_index,
                     &self.wallpapers,
                     self.search_page,
@@ -533,6 +701,8 @@ impl App {
                     self.config_editing,
                     &self.config_input,
                     self.config_cursor,
+                    self.cursor_visible,
+                    &self.config.cursor_style,
                 )
                 .render(frame, body_area);
             }
@@ -543,6 +713,12 @@ impl App {
                     &self.gallery_thumbnail_lines,
                     &self.theme,
                     &self.download_dir,
+                    self.gallery_editing,
+                    &self.gallery_edit_input,
+                    self.gallery_edit_cursor,
+                    self.gallery_cursor_visible,
+                    &self.config.cursor_style,
+                    &self.confirm_dialog,
                 )
                 .render(frame, body_area);
             }

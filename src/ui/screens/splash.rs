@@ -6,16 +6,20 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::ui::theme::Theme;
+use crate::ui::theme::{StyleKey, Theme};
 use crate::ui::widgets::help_bar::HelpBar;
 
 pub struct SplashScreen<'a> {
     theme: &'a Theme,
+    recent_downloads: &'a [String],
 }
 
 impl<'a> SplashScreen<'a> {
-    pub fn new(theme: &'a Theme) -> Self {
-        Self { theme }
+    pub fn new(theme: &'a Theme, recent_downloads: &'a [String]) -> Self {
+        Self {
+            theme,
+            recent_downloads,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
@@ -48,23 +52,43 @@ impl<'a> SplashScreen<'a> {
         lines.push(Line::from(""));
         lines.push(
             Line::from(vec![
-                Span::styled("s", Style::default().fg(self.theme.secondary).bold()),
+                Span::styled("s", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Search  "),
-                Span::styled("g", Style::default().fg(self.theme.secondary).bold()),
+                Span::styled("g", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Gallery  "),
-                Span::styled("c", Style::default().fg(self.theme.secondary).bold()),
+                Span::styled("c", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Settings  "),
-                Span::styled("q", Style::default().fg(self.theme.error).bold()),
+                Span::styled("q", self.theme.resolve(StyleKey::Error).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Quit"),
             ])
             .centered(),
         );
 
+        if !self.recent_downloads.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(
+                Line::from(Span::styled(
+                    "Recent downloads",
+                    self.theme.resolve(StyleKey::Title),
+                ))
+                .centered(),
+            );
+            for title in self.recent_downloads.iter().take(5) {
+                lines.push(
+                    Line::from(Span::styled(
+                        format!("• {title}"),
+                        self.theme.resolve(StyleKey::Secondary),
+                    ))
+                    .centered(),
+                );
+            }
+        }
+
         let splash = Paragraph::new(lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(self.theme.primary)),
+                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
             )
             .alignment(ratatui::layout::Alignment::Center);
 

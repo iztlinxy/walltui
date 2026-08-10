@@ -91,6 +91,15 @@ async fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<()> {
     if let Event::Key(key) = event
         && key.kind == KeyEventKind::Press
     {
+        // Global shortcuts.
+        if key.code == KeyCode::Char('t')
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+            && key.modifiers.contains(KeyModifiers::SHIFT)
+        {
+            app.cycle_theme();
+            return Ok(());
+        }
+
         match key.code {
             KeyCode::Char('q') => app.quit(),
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => app.quit(),
@@ -258,11 +267,35 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) {
 }
 
 async fn handle_gallery_event(app: &mut App, key: KeyCode) {
+    // Confirm dialog takes precedence.
+    if app.confirm_dialog.is_some() {
+        match key {
+            KeyCode::Char('y') | KeyCode::Char('Y') => app.confirm_gallery_delete(),
+            _ => app.confirm_dialog = None,
+        }
+        return;
+    }
+
+    if app.gallery_editing {
+        match key {
+            KeyCode::Esc => app.cancel_gallery_rename(),
+            KeyCode::Enter => app.confirm_gallery_rename(),
+            KeyCode::Backspace => app.handle_gallery_edit_backspace(),
+            KeyCode::Left => app.handle_gallery_edit_left(),
+            KeyCode::Right => app.handle_gallery_edit_right(),
+            KeyCode::Char(c) => app.handle_gallery_edit_input(c),
+            _ => {}
+        }
+        return;
+    }
+
     match key {
         KeyCode::Esc => app.go_back(),
         KeyCode::Up | KeyCode::Char('k') => app.move_gallery_selection_up(),
         KeyCode::Down | KeyCode::Char('j') => app.move_gallery_selection_down(),
-        KeyCode::Char('r') => app.load_gallery(),
+        KeyCode::Char('R') => app.load_gallery(),
+        KeyCode::Char('r') => app.start_gallery_rename(),
+        KeyCode::Char('d') => app.prompt_delete_gallery_selected(),
         KeyCode::Enter => {
             if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
                 let _ = open::that(&wallpaper.url);
@@ -272,8 +305,8 @@ async fn handle_gallery_event(app: &mut App, key: KeyCode) {
             if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
                 let path = std::path::Path::new(&wallpaper.url);
                 match walltui::platform::set_wallpaper(path) {
-                    Ok(()) => app.notification = Some("Wallpaper set successfully".to_string()),
-                    Err(e) => app.notification = Some(format!("Failed to set wallpaper: {e}")),
+                    Ok(()) => app.toast_manager.show("Wallpaper set successfully"),
+                    Err(e) => app.toast_manager.show(format!("Failed to set wallpaper: {e}")),
                 }
             }
         }

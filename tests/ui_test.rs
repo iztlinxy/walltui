@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::sync::mpsc;
 
@@ -7,9 +8,11 @@ use walltui::app::App;
 use walltui::core::download::{DownloadManager, DownloadTask};
 use walltui::core::models::{Provider, Wallpaper};
 use walltui::infrastructure::config_loader::AppConfig;
+use walltui::infrastructure::gallery_index::GalleryIndex;
 use walltui::ui::screens::Screen;
 use walltui::ui::screens::config::ConfigField;
 use walltui::ui::screens::resolution_select::ResolutionOption;
+use walltui::ui::widgets::toast::ToastManager;
 
 fn make_app() -> App {
     let (_tx, rx) = mpsc::channel(100);
@@ -27,6 +30,8 @@ fn make_app() -> App {
         category_general: true,
         category_anime: true,
         category_people: false,
+        theme_name: "dark".to_string(),
+        cursor_style: "block".to_string(),
     };
 
     App {
@@ -66,6 +71,16 @@ fn make_app() -> App {
         pending_download_wallpaper: None,
         resolution_selected_index: 0,
         resolution_options: ResolutionOption::presets(),
+        cursor_visible: true,
+        last_blink: Instant::now(),
+        toast_manager: ToastManager::default(),
+        recent_downloads: Vec::new(),
+        confirm_dialog: None,
+        gallery_index: GalleryIndex::default(),
+        gallery_editing: false,
+        gallery_edit_input: String::new(),
+        gallery_edit_cursor: 0,
+        gallery_cursor_visible: true,
     }
 }
 

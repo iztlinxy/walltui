@@ -15,6 +15,8 @@ pub struct AppConfig {
     pub category_general: bool,
     pub category_anime: bool,
     pub category_people: bool,
+    pub theme_name: String,
+    pub cursor_style: String,
 }
 
 impl Default for AppConfig {
@@ -29,6 +31,8 @@ impl Default for AppConfig {
             category_general: true,
             category_anime: true,
             category_people: false,
+            theme_name: "dark".to_string(),
+            cursor_style: "block".to_string(),
         }
     }
 }
