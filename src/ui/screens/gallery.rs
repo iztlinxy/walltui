@@ -26,6 +26,7 @@ pub struct GalleryScreen<'a> {
     cursor_visible: bool,
     cursor_style: &'a str,
     confirm_dialog: &'a Option<ConfirmDialog>,
+    loading: bool,
 }
 
 impl<'a> GalleryScreen<'a> {
@@ -42,6 +43,7 @@ impl<'a> GalleryScreen<'a> {
         cursor_visible: bool,
         cursor_style: &'a str,
         confirm_dialog: &'a Option<ConfirmDialog>,
+        loading: bool,
     ) -> Self {
         Self {
             wallpapers,
@@ -55,6 +57,7 @@ impl<'a> GalleryScreen<'a> {
             cursor_visible,
             cursor_style,
             confirm_dialog,
+            loading,
         }
     }
 
@@ -70,7 +73,18 @@ impl<'a> GalleryScreen<'a> {
             self.render_header(frame, chunks[0]);
         }
 
-        if self.wallpapers.is_empty() {
+        if self.loading {
+            let loading = Paragraph::new(Line::from(Span::styled(
+                "Loading gallery...",
+                self.theme.resolve(StyleKey::Secondary),
+            )))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
+            );
+            frame.render_widget(loading, chunks[1]);
+        } else if self.wallpapers.is_empty() {
             let empty = Paragraph::new(Line::from(Span::styled(
                 "No wallpapers found in download folder.",
                 self.theme.resolve(StyleKey::Secondary),

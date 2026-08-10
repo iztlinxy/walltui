@@ -78,6 +78,9 @@ pub struct App {
     pub gallery_edit_input: String,
     pub gallery_edit_cursor: usize,
     pub gallery_cursor_visible: bool,
+    pub gallery_scan_rx: mpsc::Receiver<Vec<Wallpaper>>,
+    pub gallery_scan_tx: mpsc::Sender<Vec<Wallpaper>>,
+    pub gallery_loading: bool,
 }
 
 impl App {
@@ -85,6 +88,7 @@ impl App {
         let (tx, rx) = mpsc::channel(100);
         let (thumb_tx, thumb_rx) = mpsc::channel(10);
         let (gallery_thumb_tx, gallery_thumb_rx) = mpsc::channel(10);
+        let (gallery_scan_tx, gallery_scan_rx) = mpsc::channel(1);
         let manager = Arc::new(DownloadManager::new());
         manager.start_worker(tx);
 
@@ -141,6 +145,9 @@ impl App {
             gallery_edit_input: String::new(),
             gallery_edit_cursor: 0,
             gallery_cursor_visible: true,
+            gallery_scan_rx,
+            gallery_scan_tx,
+            gallery_loading: false,
         }
     }
 
@@ -193,6 +200,11 @@ impl App {
             } else {
                 self.gallery_thumbnail_lines = Vec::new();
             }
+        }
+
+        while let Ok(wallpapers) = self.gallery_scan_rx.try_recv() {
+            self.gallery_wallpapers = wallpapers;
+            self.gallery_loading = false;
         }
 
         if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
@@ -419,13 +431,27 @@ impl App {
     }
 
     pub fn load_gallery(&mut self) {
-        self.gallery_wallpapers = scan_local_wallpapers(&self.download_dir);
-        for wp in &mut self.gallery_wallpapers {
-            wp.title = self.gallery_index.display_name(wp);
-        }
+        self.gallery_loading = true;
+        self.gallery_wallpapers.clear();
         self.gallery_selected_index = 0;
         self.gallery_thumbnail_lines = Vec::new();
         self.gallery_thumbnail_loading_id = None;
+        let dir = self.download_dir.clone();
+        let tx = self.gallery_scan_tx.clone();
+        let index = self.gallery_index.clone();
+        tokio::spawn(async move {
+            let wallpapers = tokio::task::spawn_blocking(move || scan_local_wallpapers(&dir))
+                .await
+                .unwrap_or_default();
+            let wallpapers: Vec<Wallpaper> = wallpapers
+                .into_iter()
+                .map(|mut wp| {
+                    wp.title = index.display_name(&wp);
+                    wp
+                })
+                .collect();
+            let _ = tx.send(wallpapers).await;
+        });
     }
 
     pub fn move_gallery_selection_up(&mut self) {
@@ -554,6 +580,16 @@ impl App {
                 self.config_input = self.download_dir.to_string_lossy().to_string();
                 self.config_cursor = self.config_input.len();
             }
+            ConfigField::ThemeName => {
+                self.config_editing = true;
+                self.config_input = self.config.theme_name.clone();
+                self.config_cursor = self.config_input.len();
+            }
+            ConfigField::CursorStyle => {
+                self.config_editing = true;
+                self.config_input = self.config.cursor_style.clone();
+                self.config_cursor = self.config_input.len();
+            }
             _ => {
                 self.toggle_config_field();
             }
@@ -641,6 +677,29 @@ impl App {
                 self.save_config();
                 self.notification = Some(format!("Download dir saved: {}", self.download_dir.display()));
             }
+            ConfigField::ThemeName => {
+                let name = self.config_input.trim();
+                if name.is_empty() {
+                    self.toast_manager.show("Theme name cannot be empty");
+                    return;
+                }
+                let new_theme = crate::ui::theme_loader::ThemeLoader::load(name);
+                self.config.theme_name = name.to_string();
+                self.theme = new_theme;
+                self.save_config();
+                self.toast_manager.show(format!("Theme: {name}"));
+            }
+            ConfigField::CursorStyle => {
+                let style = self.config_input.trim();
+                if matches!(style, "block" | "line" | "underline") {
+                    self.config.cursor_style = style.to_string();
+                    self.save_config();
+                    self.toast_manager.show(format!("Cursor style: {style}"));
+                } else {
+                    self.toast_manager.show("Cursor style must be block, line or underline");
+                    return;
+                }
+            }
             _ => {}
         }
         self.config_editing = false;
@@ -698,6 +757,7 @@ impl App {
                     &self.theme,
                     &self.config,
                     self.config_selected_index,
+                    self.config_fields[self.config_selected_index],
                     self.config_editing,
                     &self.config_input,
                     self.config_cursor,
@@ -719,6 +779,7 @@ impl App {
                     self.gallery_cursor_visible,
                     &self.config.cursor_style,
                     &self.confirm_dialog,
+                    self.gallery_loading,
                 )
                 .render(frame, body_area);
             }

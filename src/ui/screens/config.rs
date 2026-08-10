@@ -14,6 +14,8 @@ use crate::ui::widgets::help_bar::HelpBar;
 pub enum ConfigField {
     ApiKey,
     DownloadDir,
+    ThemeName,
+    CursorStyle,
     PuritySfw,
     PuritySketchy,
     PurityNsfw,
@@ -27,6 +29,8 @@ impl ConfigField {
         vec![
             ConfigField::ApiKey,
             ConfigField::DownloadDir,
+            ConfigField::ThemeName,
+            ConfigField::CursorStyle,
             ConfigField::PuritySfw,
             ConfigField::PuritySketchy,
             ConfigField::PurityNsfw,
@@ -37,7 +41,10 @@ impl ConfigField {
     }
 
     pub fn is_editable(&self) -> bool {
-        matches!(self, ConfigField::ApiKey | ConfigField::DownloadDir)
+        matches!(
+            self,
+            ConfigField::ApiKey | ConfigField::DownloadDir | ConfigField::ThemeName | ConfigField::CursorStyle
+        )
     }
 }
 
@@ -45,6 +52,7 @@ pub struct ConfigScreen<'a> {
     theme: &'a Theme,
     config: &'a AppConfig,
     selected: usize,
+    selected_field: ConfigField,
     editing: bool,
     input: &'a str,
     cursor: usize,
@@ -57,6 +65,7 @@ impl<'a> ConfigScreen<'a> {
         theme: &'a Theme,
         config: &'a AppConfig,
         selected: usize,
+        selected_field: ConfigField,
         editing: bool,
         input: &'a str,
         cursor: usize,
@@ -67,6 +76,7 @@ impl<'a> ConfigScreen<'a> {
             theme,
             config,
             selected,
+            selected_field,
             editing,
             input,
             cursor,
@@ -118,6 +128,8 @@ impl<'a> ConfigScreen<'a> {
         vec![
             self.api_key_line(),
             self.download_dir_line(),
+            self.theme_name_line(),
+            self.cursor_style_line(),
             self.purity_line("SFW", self.config.purity_sfw, false),
             self.purity_line("Sketchy", self.config.purity_sketchy, false),
             self.purity_line(
@@ -146,7 +158,8 @@ impl<'a> ConfigScreen<'a> {
     }
 
     fn download_dir_line(&self) -> Line<'static> {
-        if self.editing && self.selected == 1 {
+        let editing = self.editing && self.selected_field == ConfigField::DownloadDir;
+        if editing {
             let before: String = self.input.chars().take(self.cursor).collect();
             let iter = self.input.chars().skip(self.cursor);
             let rest: String = iter.collect();
@@ -188,6 +201,67 @@ impl<'a> ConfigScreen<'a> {
                 Span::raw(self.config.download_dir.to_string_lossy().to_string()),
             ])
         }
+    }
+
+    fn theme_name_line(&self) -> Line<'static> {
+        let editing = self.editing && self.selected_field == ConfigField::ThemeName;
+        if editing {
+            self.editable_line("Theme", self.input, self.cursor)
+        } else {
+            Line::from(vec![
+                Span::styled("Theme:  ", self.theme.resolve(StyleKey::Title)),
+                Span::raw(self.config.theme_name.clone()),
+            ])
+        }
+    }
+
+    fn cursor_style_line(&self) -> Line<'static> {
+        let editing = self.editing && self.selected_field == ConfigField::CursorStyle;
+        if editing {
+            self.editable_line("Cursor", self.input, self.cursor)
+        } else {
+            Line::from(vec![
+                Span::styled("Cursor:  ", self.theme.resolve(StyleKey::Title)),
+                Span::raw(self.config.cursor_style.clone()),
+            ])
+        }
+    }
+
+    fn editable_line(&self, label: &str, input: &str, cursor: usize) -> Line<'static> {
+        let before: String = input.chars().take(cursor).collect();
+        let rest: String = input.chars().skip(cursor).collect();
+        let cursor_str = if self.cursor_visible {
+            match self.cursor_style {
+                "line" => "▏".to_string(),
+                "underline" => "_".to_string(),
+                _ => "█".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        let (cursor_char, after) = if cursor_str.is_empty() {
+            (String::new(), rest)
+        } else {
+            let mut chars = rest.chars();
+            let current = chars.next().unwrap_or(' ').to_string();
+            let after: String = chars.collect();
+            (current, after)
+        };
+        Line::from(vec![
+            Span::styled(format!("{label}:  "), self.theme.resolve(StyleKey::Title)),
+            Span::raw("> "),
+            Span::raw(before),
+            Span::styled(
+                cursor_char,
+                if self.cursor_visible {
+                    self.theme.resolve(StyleKey::Cursor)
+                } else {
+                    Style::default()
+                },
+            ),
+            Span::raw(cursor_str),
+            Span::raw(after),
+        ])
     }
 
     fn purity_line(&self, label: &str, on: bool, warn: bool) -> Line<'static> {

@@ -18,6 +18,7 @@ fn make_app() -> App {
     let (_tx, rx) = mpsc::channel(100);
     let (thumb_tx, thumb_rx) = mpsc::channel(10);
     let (gallery_tx, gallery_rx) = mpsc::channel(10);
+    let (gallery_scan_tx, gallery_scan_rx) = mpsc::channel(1);
     let manager = Arc::new(DownloadManager::new());
 
     let config = AppConfig {
@@ -76,13 +77,16 @@ fn make_app() -> App {
         toast_manager: ToastManager::default(),
         recent_downloads: Vec::new(),
         confirm_dialog: None,
-        gallery_index: GalleryIndex::default(),
-        gallery_editing: false,
-        gallery_edit_input: String::new(),
-        gallery_edit_cursor: 0,
-        gallery_cursor_visible: true,
+            gallery_index: GalleryIndex::default(),
+            gallery_editing: false,
+            gallery_edit_input: String::new(),
+            gallery_edit_cursor: 0,
+            gallery_cursor_visible: true,
+            gallery_scan_rx,
+            gallery_scan_tx,
+            gallery_loading: false,
+        }
     }
-}
 
 fn sample_wallpaper(id: &str) -> Wallpaper {
     Wallpaper {
