@@ -107,6 +107,7 @@ impl<'a> GalleryScreen<'a> {
                 ("↑/↓", "Navigate"),
                 ("Enter", "Open"),
                 ("w", "Set wallpaper"),
+                ("Shift+W", "Stop video"),
                 ("r", "Rename"),
                 ("d", "Delete"),
                 ("Esc", "Back"),

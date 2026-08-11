@@ -56,6 +56,8 @@ impl<'a> SplashScreen<'a> {
                 Span::raw(" Search  "),
                 Span::styled("g", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Gallery  "),
+                Span::styled("5", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::raw(" yt-dlp  "),
                 Span::styled("c", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
                 Span::raw(" Settings  "),
                 Span::styled("q", self.theme.resolve(StyleKey::Error).add_modifier(ratatui::style::Modifier::BOLD)),
@@ -95,7 +97,7 @@ impl<'a> SplashScreen<'a> {
         frame.render_widget(splash, chunks[0]);
 
         let help_shortcuts: Vec<(&str, &str)> =
-            vec![("s", "Search"), ("g", "Gallery"), ("c", "Settings"), ("q", "Quit")];
+            vec![("s", "Search"), ("g", "Gallery"), ("5", "yt-dlp"), ("c", "Settings"), ("q", "Quit")];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

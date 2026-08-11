@@ -101,6 +101,7 @@ impl<'a> SearchScreen<'a> {
             ("n/p", &page_text),
             ("Enter", "View"),
             ("d", "Download"),
+            ("5", "yt-dlp"),
             ("Esc", "Back"),
         ];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[2]);

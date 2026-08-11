@@ -59,11 +59,18 @@ impl<'a> ImageList<'a> {
                     format!(" [{}]", tags.join(", "))
                 };
 
+                let video_badge = if w.is_video() {
+                    Span::styled(" [VIDEO] ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+                } else {
+                    Span::raw("")
+                };
+
                 let line = Line::from(vec![
                     Span::styled(
                         format!(" {} ", w.provider),
                         Style::default().fg(self.theme.primary),
                     ),
+                    video_badge,
                     Span::raw(format!("{} ", w.title)),
                     Span::styled(format!("[{}]", dims), Style::default().fg(Color::DarkGray)),
                     Span::styled(

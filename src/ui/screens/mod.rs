@@ -5,6 +5,9 @@ pub mod gallery;
 pub mod resolution_select;
 pub mod search;
 pub mod splash;
+pub mod theme_select;
+pub mod ytdlp_input;
+pub mod ytdlp_preview;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
@@ -15,4 +18,7 @@ pub enum Screen {
     Config,
     Gallery,
     ResolutionSelect,
+    ThemeSelect,
+    YtDlpInput,
+    YtDlpPreview,
 }

@@ -64,6 +64,9 @@ impl<'a> AppLayout<'a> {
             Screen::Config => "Settings",
             Screen::Gallery => "Gallery",
             Screen::ResolutionSelect => "Resolution",
+            Screen::ThemeSelect => "Themes",
+            Screen::YtDlpInput => "yt-dlp URL",
+            Screen::YtDlpPreview => "yt-dlp Preview",
         };
         let footer_text = format!(" {screen_name} ");
         let mut footer_spans = vec![
