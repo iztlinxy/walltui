@@ -50,7 +50,6 @@ fn make_app() -> App {
         download_tasks: Vec::new(),
         download_manager: manager,
         download_rx: rx,
-        notification: None,
         thumbnail_lines: Vec::new(),
         thumbnail_rx: thumb_rx,
         thumbnail_tx: thumb_tx,
@@ -85,6 +84,19 @@ fn make_app() -> App {
             gallery_scan_rx,
             gallery_scan_tx,
             gallery_loading: false,
+            ytdlp_url: String::new(),
+            ytdlp_cursor_pos: 0,
+            ytdlp_focused: true,
+            ytdlp_error: None,
+            ytdlp_wallpaper: None,
+            ytdlp_clip_start: 0,
+            ytdlp_clip_end: 30,
+            ytdlp_downloading: false,
+            ytdlp_download_progress: 0,
+            ytdlp_download_status: String::new(),
+            ytdlp_progress_rx: None,
+            ytdlp_download_wallpaper: None,
+            theme_selected_index: 0,
         }
     }
 
@@ -107,6 +119,10 @@ fn sample_wallpaper(id: &str) -> Wallpaper {
         purity: None,
         views: None,
         favorites: None,
+        is_video: false,
+        duration_secs: None,
+        clip_start_secs: None,
+        clip_end_secs: None,
     }
 }
 

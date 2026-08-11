@@ -21,6 +21,10 @@ fn sample_wallpaper() -> Wallpaper {
         purity: Some("sfw".to_string()),
         views: Some(1000),
         favorites: Some(50),
+        is_video: false,
+        duration_secs: None,
+        clip_start_secs: None,
+        clip_end_secs: None,
     }
 }
 
@@ -408,6 +412,10 @@ mod wallhaven_test {
                 },
                 views: Some(self.views),
                 favorites: Some(self.favorites),
+                is_video: false,
+                duration_secs: None,
+                clip_start_secs: None,
+                clip_end_secs: None,
             }
         }
     }

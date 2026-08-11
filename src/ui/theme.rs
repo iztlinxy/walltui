@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use ratatui::style::{Color, Modifier, Style};
@@ -468,16 +467,6 @@ pub fn cycle_theme_name(current: &str) -> &'static str {
     let names = builtin_theme_names();
     let pos = names.iter().position(|n| *n == current).unwrap_or(0);
     names[(pos + 1) % names.len()]
-}
-
-pub fn theme_registry() -> HashMap<&'static str, Theme> {
-    let mut map = HashMap::new();
-    for name in builtin_theme_names() {
-        if let Some(theme) = builtin_theme(name) {
-            map.insert(name, theme);
-        }
-    }
-    map
 }
 
 #[derive(Debug, Default, Deserialize)]
