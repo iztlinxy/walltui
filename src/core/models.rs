@@ -22,17 +22,34 @@ pub struct Wallpaper {
     pub purity: Option<String>,
     pub views: Option<u64>,
     pub favorites: Option<u64>,
+    // Video-specific fields (yt-dlp)
+    #[serde(default)]
+    pub is_video: bool,
+    #[serde(default)]
+    pub duration_secs: Option<u64>,
+    #[serde(default)]
+    pub clip_start_secs: Option<u64>,
+    #[serde(default)]
+    pub clip_end_secs: Option<u64>,
+}
+
+impl Wallpaper {
+    pub fn is_video(&self) -> bool {
+        self.is_video
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provider {
     Wallhaven,
+    YtDlp,
 }
 
 impl fmt::Display for Provider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Provider::Wallhaven => write!(f, "Wallhaven"),
+            Provider::YtDlp => write!(f, "yt-dlp"),
         }
     }
 }
@@ -43,6 +60,7 @@ impl FromStr for Provider {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "wallhaven" => Ok(Provider::Wallhaven),
+            "ytdlp" | "yt-dlp" => Ok(Provider::YtDlp),
             other => Err(format!("unknown provider: {other}")),
         }
     }
@@ -199,6 +217,10 @@ mod tests {
             purity: None,
             views: None,
             favorites: None,
+            is_video: false,
+            duration_secs: None,
+            clip_start_secs: None,
+            clip_end_secs: None,
         }
     }
 
