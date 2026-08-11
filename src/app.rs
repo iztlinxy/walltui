@@ -24,6 +24,9 @@ use crate::ui::screens::gallery::GalleryScreen;
 use crate::ui::screens::resolution_select::{ResolutionOption, ResolutionSelectScreen};
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
+use crate::ui::screens::ytdlp_input::YtDlpInputScreen;
+use crate::ui::screens::ytdlp_preview::YtDlpPreviewScreen;
+use crate::ui::screens::theme_select::ThemeSelectScreen;
 use crate::ui::theme::Theme;
 use crate::ui::theme_loader::ThemeLoader;
 use crate::ui::widgets::dialog::ConfirmDialog;
@@ -44,7 +47,6 @@ pub struct App {
     pub download_tasks: Vec<DownloadTask>,
     pub download_manager: Arc<DownloadManager>,
     pub download_rx: mpsc::Receiver<DownloadEvent>,
-    pub notification: Option<String>,
     pub thumbnail_lines: Vec<Line<'static>>,
     pub thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
     pub thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
@@ -81,6 +83,20 @@ pub struct App {
     pub gallery_scan_rx: mpsc::Receiver<Vec<Wallpaper>>,
     pub gallery_scan_tx: mpsc::Sender<Vec<Wallpaper>>,
     pub gallery_loading: bool,
+    // yt-dlp state
+    pub ytdlp_url: String,
+    pub ytdlp_cursor_pos: usize,
+    pub ytdlp_focused: bool,
+    pub ytdlp_error: Option<String>,
+    pub ytdlp_wallpaper: Option<Wallpaper>,
+    pub ytdlp_clip_start: u64,
+    pub ytdlp_clip_end: u64,
+    pub ytdlp_downloading: bool,
+    pub ytdlp_download_progress: u8,
+    pub ytdlp_download_status: String,
+    pub ytdlp_progress_rx: Option<mpsc::Receiver<(u8, String)>>,
+    pub ytdlp_download_wallpaper: Option<Wallpaper>,
+    pub theme_selected_index: usize,
 }
 
 impl App {
@@ -113,7 +129,6 @@ impl App {
             download_tasks: Vec::new(),
             download_manager: manager,
             download_rx: rx,
-            notification: None,
             thumbnail_lines: Vec::new(),
             thumbnail_rx: thumb_rx,
             thumbnail_tx: thumb_tx,
@@ -148,21 +163,35 @@ impl App {
             gallery_scan_rx,
             gallery_scan_tx,
             gallery_loading: false,
+            ytdlp_url: String::new(),
+            ytdlp_cursor_pos: 0,
+            ytdlp_focused: true,
+            ytdlp_error: None,
+            ytdlp_wallpaper: None,
+            ytdlp_clip_start: 0,
+            ytdlp_clip_end: 30,
+            ytdlp_downloading: false,
+            ytdlp_download_progress: 0,
+            ytdlp_download_status: String::new(),
+            ytdlp_progress_rx: None,
+            ytdlp_download_wallpaper: None,
+            theme_selected_index: 0,
         }
     }
 
-    pub async fn tick(&mut self) {
-        // Cursor blink tick (530ms default).
+    pub async fn tick(&mut self) -> bool {
+        let mut dirty = false;
         if self.last_blink.elapsed() >= self.theme.cursor_blink_interval() {
             self.cursor_visible = !self.cursor_visible;
             self.gallery_cursor_visible = !self.gallery_cursor_visible;
             self.last_blink = Instant::now();
+            dirty = true;
         }
 
-        // Toast auto-dismiss.
         self.toast_manager.tick();
 
         while let Ok(event) = self.download_rx.try_recv() {
+            dirty = true;
             match event {
                 DownloadEvent::Progress(idx, progress) => {
                     if let Some(task) = self.download_tasks.get_mut(idx) {
@@ -172,7 +201,6 @@ impl App {
                 DownloadEvent::Completed(idx) => {
                     if let Some(task) = self.download_tasks.get(idx) {
                         let title = task.wallpaper.title.clone();
-                        self.notification = Some(format!("Downloaded: {title}"));
                         self.toast_manager.show(format!("Downloaded: {title}"));
                         self.add_recent_download(&title);
                     }
@@ -180,9 +208,14 @@ impl App {
             }
         }
 
-        self.download_tasks = self.download_manager.tasks().await;
+        let new_tasks = self.download_manager.tasks().await;
+        if new_tasks.len() != self.download_tasks.len() {
+            dirty = true;
+        }
+        self.download_tasks = new_tasks;
 
         while let Ok(img) = self.thumbnail_rx.try_recv() {
+            dirty = true;
             if let Some(img) = img {
                 self.thumbnail_lines = image_to_lines(&img, 42, 18);
             } else {
@@ -191,9 +224,15 @@ impl App {
         }
 
         while let Ok(img) = self.gallery_thumbnail_rx.try_recv() {
+            dirty = true;
             if let Some(img) = img {
                 let lines = image_to_lines(&img, 60, 25);
                 if let Some(w) = self.gallery_wallpapers.get(self.gallery_selected_index) {
+                    if self.gallery_thumbnail_cache.len() >= 20 {
+                        if let Some(oldest) = self.gallery_thumbnail_cache.keys().next().cloned() {
+                            self.gallery_thumbnail_cache.remove(&oldest);
+                        }
+                    }
                     self.gallery_thumbnail_cache.insert(w.id.clone(), lines.clone());
                 }
                 self.gallery_thumbnail_lines = lines;
@@ -203,8 +242,49 @@ impl App {
         }
 
         while let Ok(wallpapers) = self.gallery_scan_rx.try_recv() {
+            dirty = true;
             self.gallery_wallpapers = wallpapers;
             self.gallery_loading = false;
+        }
+
+        if let Some(rx) = &mut self.ytdlp_progress_rx {
+            while let Ok((progress, status)) = rx.try_recv() {
+                dirty = true;
+                self.ytdlp_download_progress = progress;
+                self.ytdlp_download_status = status;
+
+                if progress >= 100 {
+                    self.ytdlp_downloading = false;
+                    if let Some(wp) = self.ytdlp_download_wallpaper.take() {
+                        let title = wp.title.clone();
+                        let id = wp.id.clone();
+                        let thumb_url = wp.thumb_url.clone();
+
+                        self.toast_manager.show(format!("Downloaded: {}", title));
+                        self.add_recent_download(&title);
+
+                        let video_dir = self.download_dir.join("videos");
+                        let duration = self.ytdlp_clip_end - self.ytdlp_clip_start;
+                        let video_path = video_dir.join(format!(
+                            "yt_dlp_{}_{}s_1920x1080.mp4",
+                            crate::providers::ytdlp::sanitize_id(&id),
+                            duration
+                        ));
+
+                        let video_wallpaper = Wallpaper {
+                            url: video_path.to_string_lossy().to_string(),
+                            thumb_url,
+                            title,
+                            is_video: true,
+                            ..wp
+                        };
+
+                        self.gallery_wallpapers.push(video_wallpaper);
+                    }
+                    self.ytdlp_progress_rx = None;
+                    break;
+                }
+            }
         }
 
         if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
@@ -237,6 +317,7 @@ impl App {
                 });
             }
         }
+        dirty
     }
 
     pub fn quit(&mut self) {
@@ -270,11 +351,14 @@ impl App {
     }
 
     pub fn cycle_theme(&mut self) {
-        let next = crate::ui::theme::cycle_theme_name(&self.config.theme_name);
-        self.config.theme_name = next.to_string();
-        self.theme = ThemeLoader::load(next);
+        self.navigate_to(Screen::ThemeSelect);
+    }
+
+    pub fn apply_theme(&mut self, name: &str) {
+        self.config.theme_name = name.to_string();
+        self.theme = ThemeLoader::load(name);
         let _ = self.config.save();
-        self.toast_manager.show(format!("Theme: {next}"));
+        self.toast_manager.show(format!("Theme: {name}"));
     }
 
     pub fn handle_search_input(&mut self, c: char) {
@@ -331,13 +415,14 @@ impl App {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
             Provider::Wallhaven => config.wallhaven_api_key.clone(),
+            Provider::YtDlp => None,
         };
 
         let purity = build_purity_string(&config);
         let categories = build_category_string(&config);
 
         if config.purity_nsfw && api_key.is_none() {
-            self.notification = Some("NSFW requires a Wallhaven API key. Set it in Settings.".to_string());
+            self.toast_manager.show("NSFW requires a Wallhaven API key. Set it in Settings.".to_string());
         }
 
         let adapter = create_provider(self.active_provider, api_key);
@@ -427,7 +512,7 @@ impl App {
         self.download_manager.remove_completed().await;
     }
     pub fn clear_notification(&mut self) {
-        self.notification = None;
+        self.toast_manager.toast = None;
     }
 
     pub fn load_gallery(&mut self) {
@@ -657,25 +742,25 @@ impl App {
                 let val = if self.config_input.is_empty() { None } else { Some(self.config_input.clone()) };
                 self.config.wallhaven_api_key = val.clone();
                 self.save_config();
-                self.notification = match val {
-                    Some(_) => Some("API key saved".to_string()),
-                    None => Some("API key removed".to_string()),
-                };
+                self.toast_manager.show(match val {
+                    Some(_) => "API key saved".to_string(),
+                    None => "API key removed".to_string(),
+                });
             }
             ConfigField::DownloadDir => {
                 let expanded = expand_tilde(&self.config_input);
                 if expanded.as_os_str().is_empty() {
-                    self.notification = Some("Download directory cannot be empty".to_string());
+                    self.toast_manager.show("Download directory cannot be empty".to_string());
                     return;
                 }
                 if let Err(e) = std::fs::create_dir_all(&expanded) {
-                    self.notification = Some(format!("Failed to create directory: {e}"));
+                    self.toast_manager.show(format!("Failed to create directory: {e}"));
                     return;
                 }
                 self.download_dir = expanded.clone();
                 self.config.download_dir = expanded;
                 self.save_config();
-                self.notification = Some(format!("Download dir saved: {}", self.download_dir.display()));
+                self.toast_manager.show(format!("Download dir saved: {}", self.download_dir.display()));
             }
             ConfigField::ThemeName => {
                 let name = self.config_input.trim();
@@ -709,11 +794,126 @@ impl App {
         let _ = self.config.save();
     }
 
+    // yt-dlp methods
+    pub fn handle_ytdlp_input(&mut self, c: char) {
+        self.ytdlp_url.insert(self.ytdlp_cursor_pos, c);
+        self.ytdlp_cursor_pos += 1;
+    }
+
+    pub fn handle_ytdlp_backspace(&mut self) {
+        if self.ytdlp_cursor_pos > 0 {
+            self.ytdlp_cursor_pos -= 1;
+            self.ytdlp_url.remove(self.ytdlp_cursor_pos);
+        }
+    }
+
+    pub fn handle_ytdlp_left(&mut self) {
+        if self.ytdlp_cursor_pos > 0 {
+            self.ytdlp_cursor_pos -= 1;
+        }
+    }
+
+    pub fn handle_ytdlp_right(&mut self) {
+        if self.ytdlp_cursor_pos < self.ytdlp_url.len() {
+            self.ytdlp_cursor_pos += 1;
+        }
+    }
+
+    pub async fn fetch_ytdlp_metadata(&mut self) {
+        if self.ytdlp_url.is_empty() {
+            self.ytdlp_error = Some("URL cannot be empty".to_string());
+            return;
+        }
+
+        self.ytdlp_error = None;
+        let url = self.ytdlp_url.clone();
+        let output_dir = self.download_dir.clone();
+
+        let adapter = crate::providers::ytdlp::YtDlpAdapter::new(output_dir);
+        match adapter.fetch_metadata(&url).await {
+            Ok(wallpaper) => {
+                if let Err(e) = crate::providers::ytdlp::YtDlpAdapter::validate_duration(wallpaper.duration_secs) {
+                    self.ytdlp_error = Some(e);
+                    return;
+                }
+
+                let duration = wallpaper.duration_secs.unwrap_or(30);
+                let clip_len = 30.min(duration);
+                let clip_start = duration / 2 - clip_len / 2;
+                let clip_end = clip_start + clip_len;
+
+                self.ytdlp_wallpaper = Some(wallpaper);
+                self.ytdlp_clip_start = clip_start;
+                self.ytdlp_clip_end = clip_end.min(duration);
+                self.navigate_to(Screen::YtDlpPreview);
+            }
+            Err(e) => {
+                self.ytdlp_error = Some(e);
+            }
+        }
+    }
+
+    pub async fn download_ytdlp_clip(&mut self) {
+        if self.ytdlp_downloading {
+            return;
+        }
+
+        let wallpaper = match &self.ytdlp_wallpaper {
+            Some(w) => w.clone(),
+            None => return,
+        };
+
+        self.ytdlp_downloading = true;
+        self.ytdlp_download_progress = 0;
+        self.ytdlp_download_status = "Starting...".to_string();
+        self.ytdlp_error = None;
+        self.ytdlp_download_wallpaper = Some(wallpaper.clone());
+
+        let url = wallpaper.url.clone();
+        let start = self.ytdlp_clip_start;
+        let duration = self.ytdlp_clip_end - self.ytdlp_clip_start;
+        let output_dir = self.download_dir.clone();
+
+        let adapter = crate::providers::ytdlp::YtDlpAdapter::new(output_dir);
+        let (progress_tx, progress_rx) = tokio::sync::mpsc::channel(100);
+
+        tokio::spawn(async move {
+            adapter.download_clip(&url, start, duration, progress_tx).await
+        });
+
+        self.ytdlp_progress_rx = Some(progress_rx);
+    }
+
+    pub fn adjust_clip_start(&mut self, delta: i64) {
+        let duration = self.ytdlp_wallpaper.as_ref().map(|w| w.duration_secs.unwrap_or(30)).unwrap_or(30);
+        let new_start = (self.ytdlp_clip_start as i64 + delta).max(0) as u64;
+        if new_start < self.ytdlp_clip_end {
+            self.ytdlp_clip_start = new_start.min(duration);
+        }
+    }
+
+    pub fn adjust_clip_end(&mut self, delta: i64) {
+        let duration = self.ytdlp_wallpaper.as_ref().map(|w| w.duration_secs.unwrap_or(30)).unwrap_or(30);
+        let new_end = (self.ytdlp_clip_end as i64 + delta).max(0) as u64;
+        if new_end > self.ytdlp_clip_start && new_end <= duration {
+            self.ytdlp_clip_end = new_end;
+        }
+    }
+
+    pub fn reset_ytdlp(&mut self) {
+        self.ytdlp_url.clear();
+        self.ytdlp_cursor_pos = 0;
+        self.ytdlp_error = None;
+        self.ytdlp_wallpaper = None;
+        self.ytdlp_downloading = false;
+        self.ytdlp_download_progress = 0;
+        self.ytdlp_download_status.clear();
+        self.ytdlp_progress_rx = None;
+        self.ytdlp_download_wallpaper = None;
+    }
+
     pub fn draw(&self, frame: &mut Frame) {
-        let toast = self
-            .toast_manager
-            .message()
-            .or(self.notification.as_deref());
+        let toast = self.toast_manager.message();
         let body_area = AppLayout::new(
             &self.theme,
             self.current_screen,
@@ -799,6 +999,38 @@ impl App {
                     .render(frame, body_area);
                 }
             }
+            Screen::YtDlpInput => {
+                YtDlpInputScreen::new(
+                    &self.ytdlp_url,
+                    self.ytdlp_cursor_pos,
+                    self.cursor_visible,
+                    &self.config.cursor_style,
+                    self.ytdlp_error.as_deref(),
+                    &self.theme,
+                )
+                .render(frame, body_area);
+            }
+            Screen::YtDlpPreview => {
+                if let Some(wallpaper) = &self.ytdlp_wallpaper {
+                    YtDlpPreviewScreen::new(
+                        wallpaper,
+                        self.ytdlp_clip_start,
+                        self.ytdlp_clip_end,
+                        self.ytdlp_downloading,
+                        self.ytdlp_download_progress,
+                        &self.ytdlp_download_status,
+                        self.ytdlp_error.as_deref(),
+                        &self.theme,
+                    )
+                    .render(frame, body_area);
+                }
+            }
+            Screen::ThemeSelect => {
+                let themes = crate::ui::theme::builtin_theme_names();
+                let idx = themes.iter().position(|t| *t == self.config.theme_name).unwrap_or(0);
+                ThemeSelectScreen::new(&self.config.theme_name, &self.theme, idx)
+                    .render(frame, body_area);
+            }
         }
     }
 }
@@ -822,7 +1054,15 @@ fn is_image_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_video_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|ext| matches!(ext.to_lowercase().as_str(), "mp4" | "webm" | "mkv" | "avi"))
+        .unwrap_or(false)
+}
+
 fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
+    let video_dir = dir.join("videos");
     let mut entries: Vec<Wallpaper> = std::fs::read_dir(dir)
         .ok()
         .into_iter()
@@ -854,9 +1094,49 @@ fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
                 purity: None,
                 views: None,
                 favorites: None,
+                is_video: false,
+                duration_secs: None,
+                clip_start_secs: None,
+                clip_end_secs: None,
             })
         })
         .collect();
+
+    if video_dir.exists() {
+        if let Ok(video_entries) = std::fs::read_dir(&video_dir) {
+            for entry in video_entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && is_video_file(&path) {
+                    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let path_str = path.to_string_lossy().to_string();
+                    entries.push(Wallpaper {
+                        id: filename.clone(),
+                        provider: crate::core::models::Provider::YtDlp,
+                        url: path_str.clone(),
+                        thumb_url: path_str.clone(),
+                        title: filename.clone(),
+                        photographer: String::new(),
+                        width: Some(1920),
+                        height: Some(1080),
+                        avg_color: None,
+                        attribution: None,
+                        file_type: Some("video/mp4".to_string()),
+                        web_url: None,
+                        tags: Vec::new(),
+                        category: None,
+                        purity: None,
+                        views: None,
+                        favorites: None,
+                        is_video: true,
+                        duration_secs: None,
+                        clip_start_secs: None,
+                        clip_end_secs: None,
+                    });
+                }
+            }
+        }
+    }
+
     entries.sort_by(|a, b| a.title.cmp(&b.title));
     entries
 }
