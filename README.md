@@ -7,11 +7,11 @@
 \_/ \_/ |_| |_|\____/|____|  |_|  |_____| |_____|
   </pre>
   <p align="center"><b>Terminal Wallpaper Manager</b></p>
-  <p align="center"><b>v1.0</b></p>
+  <p align="center"><b>v1.4.0</b></p>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-%23007EC6?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4.0-%23007EC6?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/TUI-ratatui-%23B14B2E?style=for-the-badge&logo=rust&logoColor=white" alt="ratatui">
   <img src="https://img.shields.io/badge/license-MIT-%23007EC6?style=for-the-badge" alt="License">
@@ -23,12 +23,21 @@ Browse, preview, and download wallpapers from **Wallhaven** — all from your te
 
 ## Features
 
-- **ASCII thumbnail previews** — color-accurate previews using Unicode half-blocks
+- **Unicode half-block thumbnail previews** — color-accurate previews rendered by `ratatui-image`
 - **Resolution picker** — download at 720p, 1080p, 1440p, 4K, ultrawide, or phone with stretch/crop/fit modes
 - **Gallery** — browse your downloaded wallpapers with cached thumbnails
 - **Download manager** — queue, cancel, retry with progress tracking
 - **Search filters** — toggle SFW / Sketchy / NSFW purity and General / Anime / People categories
 - **Persistent config** — API key, download dir, purity, and categories saved automatically
+
+## Requirements
+
+WallTUI renders image previews using [`ratatui-image`](https://github.com/benjajaja/ratatui-image) with Unicode half-blocks. Your terminal must support:
+
+- **TrueColor** (24-bit color)
+- **Unicode half-blocks** (`▀` / `▄`)
+
+Modern terminals such as **Windows Terminal**, **WezTerm**, **Alacritty**, **iTerm2**, and **kitty** work out of the box. If previews look like colored text blocks or do not appear, your terminal likely lacks TrueColor/half-block support.
 
 ## Quick Start
 

@@ -31,9 +31,6 @@ open = "5"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 ratatui-image = { version = "11.0.6", default-features = false, features = ["crossterm"] }
 
-[patch.crates-io]
-zune-jpeg = { path = "vendor/zune-jpeg" }
-
 [dev-dependencies]
 serde_json = "1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util"] }
