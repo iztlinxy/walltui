@@ -140,15 +140,25 @@ struct WallhavenThumbs {
 impl WallhavenWallpaper {
     fn to_wallpaper(&self) -> Wallpaper {
         let tags: Vec<String> = self.tags.iter().map(|t| t.name.clone()).collect();
+        let title = tags
+            .first()
+            .cloned()
+            .unwrap_or_else(|| format!("Wallhaven {}", self.id));
         Wallpaper {
             id: self.id.clone(),
             provider: Provider::Wallhaven,
             url: self.path.clone(),
             thumb_url: self.thumbs.large.clone(),
-            title: format!("Wallhaven {}", self.id),
+            title,
             photographer: "Unknown".to_string(),
             width: Some(self.dimension_x),
             height: Some(self.dimension_y),
+            ratio: if self.ratio.is_empty() {
+                None
+            } else {
+                Some(self.ratio.clone())
+            },
+            file_size: Some(self.file_size),
             avg_color: self.colors.first().cloned(),
             attribution: None,
             file_type: if self.file_type.is_empty() {

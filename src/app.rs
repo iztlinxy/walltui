@@ -18,13 +18,11 @@ use crate::providers::create_provider;
 use crate::ui::app_layout::AppLayout;
 use crate::ui::screens::Screen;
 use crate::ui::screens::config::{ConfigField, ConfigScreen};
-use crate::ui::screens::detail::DetailScreen;
 use crate::ui::screens::download::DownloadScreen;
 use crate::ui::screens::gallery::GalleryScreen;
 use crate::ui::screens::resolution_select::{ResolutionOption, ResolutionSelectScreen};
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
-use crate::ui::screens::theme_select::ThemeSelectScreen;
 use crate::ui::theme::Theme;
 use crate::ui::theme_loader::ThemeLoader;
 use crate::ui::widgets::dialog::ConfirmDialog;
@@ -85,7 +83,7 @@ pub struct App {
     pub gallery_scan_rx: mpsc::Receiver<Vec<Wallpaper>>,
     pub gallery_scan_tx: mpsc::Sender<Vec<Wallpaper>>,
     pub gallery_loading: bool,
-    pub theme_selected_index: usize,
+    pub splash_selected_index: usize,
 }
 
 impl App {
@@ -156,7 +154,7 @@ impl App {
             gallery_scan_rx,
             gallery_scan_tx,
             gallery_loading: false,
-            theme_selected_index: 0,
+            splash_selected_index: 0,
         }
     }
 
@@ -243,7 +241,7 @@ impl App {
             self.gallery_loading = false;
         }
 
-        if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
+        if self.current_screen == Screen::Search
             && let Some(wallpaper) = self.wallpapers.get(self.selected_index)
             && self.thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
         {
@@ -322,22 +320,6 @@ impl App {
         self.search_fullscreen = !self.search_fullscreen;
     }
 
-    pub fn enter_theme_select(&mut self) {
-        let themes = crate::ui::theme::builtin_theme_names();
-        self.theme_selected_index = themes
-            .iter()
-            .position(|t| *t == self.config.theme_name)
-            .unwrap_or(0);
-        self.navigate_to(Screen::ThemeSelect);
-    }
-
-    pub fn apply_theme(&mut self, name: &str) {
-        self.config.theme_name = name.to_string();
-        self.theme = ThemeLoader::load(name);
-        let _ = self.config.save();
-        self.toast_manager.show(format!("Theme: {name}"));
-    }
-
     pub fn handle_search_input(&mut self, c: char) {
         insert_char(&mut self.search_query, &mut self.cursor_pos, c);
     }
@@ -404,6 +386,31 @@ impl App {
     pub fn move_selection_down(&mut self) {
         if self.selected_index + 1 < self.wallpapers.len() {
             self.selected_index += 1;
+        }
+    }
+
+    pub fn splash_move_up(&mut self) {
+        if self.splash_selected_index > 0 {
+            self.splash_selected_index -= 1;
+        }
+    }
+
+    pub fn splash_move_down(&mut self) {
+        if self.splash_selected_index + 1 < 4 {
+            self.splash_selected_index += 1;
+        }
+    }
+
+    pub fn splash_select(&mut self) {
+        match self.splash_selected_index {
+            0 => self.navigate_to(Screen::Search),
+            1 => {
+                self.load_gallery();
+                self.navigate_to(Screen::Gallery);
+            }
+            2 => self.navigate_to(Screen::Config),
+            3 => self.quit(),
+            _ => {}
         }
     }
 
@@ -484,6 +491,22 @@ impl App {
     pub fn prev_page(&mut self) {
         if self.search_page > 1 {
             self.search_page -= 1;
+        }
+    }
+
+    pub fn start_selected_download(&mut self) {
+        if let Some(wallpaper) = self.wallpapers.get(self.selected_index).cloned() {
+            self.pending_download_wallpaper = Some(wallpaper);
+            self.resolution_selected_index = 0;
+            self.navigate_to(Screen::ResolutionSelect);
+        }
+    }
+
+    pub fn save_selected_original(&mut self) {
+        if let Some(wallpaper) = self.wallpapers.get(self.selected_index).cloned() {
+            let title = wallpaper.title.clone();
+            self.enqueue_download(&wallpaper, Some(ResolutionOption::Original));
+            self.toast_manager.show(format!("Downloading: {title}"));
         }
     }
 
@@ -653,11 +676,6 @@ impl App {
                 self.config_input = self.download_dir.to_string_lossy().to_string();
                 self.config_cursor = self.config_input.len();
             }
-            ConfigField::ThemeName => {
-                self.config_editing = true;
-                self.config_input = self.config.theme_name.clone();
-                self.config_cursor = self.config_input.len();
-            }
             ConfigField::CursorStyle => {
                 self.config_editing = true;
                 self.config_input = self.config.cursor_style.clone();
@@ -697,6 +715,32 @@ impl App {
         if self.config_selected_index + 1 < self.config_fields.len() {
             self.config_selected_index += 1;
         }
+    }
+
+    pub fn cycle_cursor_style_left(&mut self) {
+        let styles = ["block", "line", "underline"];
+        let current = styles
+            .iter()
+            .position(|s| *s == self.config.cursor_style)
+            .unwrap_or(0);
+        let next = if current == 0 {
+            styles.len() - 1
+        } else {
+            current - 1
+        };
+        self.config.cursor_style = styles[next].to_string();
+        self.save_config();
+    }
+
+    pub fn cycle_cursor_style_right(&mut self) {
+        let styles = ["block", "line", "underline"];
+        let current = styles
+            .iter()
+            .position(|s| *s == self.config.cursor_style)
+            .unwrap_or(0);
+        let next = (current + 1) % styles.len();
+        self.config.cursor_style = styles[next].to_string();
+        self.save_config();
     }
 
     pub fn cancel_config_edit(&mut self) {
@@ -739,18 +783,6 @@ impl App {
                     self.download_dir.display()
                 ));
             }
-            ConfigField::ThemeName => {
-                let name = self.config_input.trim();
-                if name.is_empty() {
-                    self.toast_manager.show("Theme name cannot be empty");
-                    return;
-                }
-                let new_theme = crate::ui::theme_loader::ThemeLoader::load(name);
-                self.config.theme_name = name.to_string();
-                self.theme = new_theme;
-                self.save_config();
-                self.toast_manager.show(format!("Theme: {name}"));
-            }
             ConfigField::CursorStyle => {
                 let style = self.config_input.trim();
                 if matches!(style, "block" | "line" | "underline") {
@@ -784,7 +816,8 @@ impl App {
 
         match self.current_screen {
             Screen::Splash => {
-                SplashScreen::new(&self.theme, &self.recent_downloads).render(frame, body_area);
+                SplashScreen::new(&self.theme, &self.recent_downloads, self.splash_selected_index)
+                    .render(frame, body_area);
             }
             Screen::Search => {
                 let thumbnail_image = &mut self.thumbnail_image;
@@ -796,20 +829,12 @@ impl App {
                     &self.config.cursor_style,
                     self.selected_index,
                     &self.wallpapers,
-                    self.search_page,
-                    self.search_total_pages,
                     thumbnail_image,
                     &self.theme,
+                    &self.config,
                 )
                 .fullscreen(self.search_fullscreen)
                 .render(frame, body_area);
-            }
-            Screen::Detail => {
-                if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-                    let thumbnail_image = &mut self.thumbnail_image;
-                    DetailScreen::new(wallpaper, &self.theme, thumbnail_image)
-                        .render(frame, body_area);
-                }
             }
             Screen::Download => {
                 DownloadScreen::new(&self.download_tasks, self.selected_index, &self.theme)
@@ -863,14 +888,6 @@ impl App {
                     .render(frame, body_area);
                 }
             }
-            Screen::ThemeSelect => {
-                ThemeSelectScreen::new(
-                    &self.config.theme_name,
-                    &self.theme,
-                    self.theme_selected_index,
-                )
-                .render(frame, body_area);
-            }
         }
     }
 }
@@ -894,6 +911,17 @@ fn is_image_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+fn reduce_ratio(width: u32, height: u32) -> Option<String> {
+    fn gcd(a: u32, b: u32) -> u32 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    let g = gcd(width, height);
+    if g == 0 {
+        return None;
+    }
+    Some(format!("{}:{}", width / g, height / g))
+}
+
 fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
     let mut entries: Vec<Wallpaper> = std::fs::read_dir(dir)
         .ok()
@@ -908,6 +936,12 @@ fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
             let filename = path.file_name()?.to_string_lossy().to_string();
             let path_str = path.to_string_lossy().to_string();
             let (width, height) = image::image_dimensions(&path).unwrap_or((0, 0));
+            let ratio = if width > 0 && height > 0 {
+                reduce_ratio(width, height)
+            } else {
+                None
+            };
+            let file_size = std::fs::metadata(&path).map(|m| m.len()).ok();
             Some(Wallpaper {
                 id: filename.clone(),
                 provider: crate::core::models::Provider::Wallhaven,
@@ -917,6 +951,8 @@ fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
                 photographer: String::new(),
                 width: if width > 0 { Some(width) } else { None },
                 height: if height > 0 { Some(height) } else { None },
+                ratio,
+                file_size,
                 avg_color: None,
                 attribution: None,
                 file_type: None,

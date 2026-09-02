@@ -24,7 +24,7 @@ fn make_app() -> App {
 
     let config = AppConfig {
         wallhaven_api_key: None,
-        download_dir: PathBuf::from("."),
+        download_dir: dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")),
         default_provider: Provider::Wallhaven,
         purity_sfw: true,
         purity_sketchy: false,
@@ -59,7 +59,7 @@ fn make_app() -> App {
         thumbnail_rx: thumb_rx,
         thumbnail_tx: thumb_tx,
         thumbnail_loading_id: None,
-        download_dir: PathBuf::from("."),
+        download_dir: dirs::download_dir().unwrap_or_else(|| PathBuf::from(".")),
         config: config.clone(),
         config_fields: ConfigField::all(),
         config_selected_index: 0,
@@ -88,8 +88,8 @@ fn make_app() -> App {
         gallery_cursor_visible: true,
         gallery_scan_rx,
         gallery_scan_tx,
-        gallery_loading: false,
-        theme_selected_index: 0,
+            gallery_loading: false,
+            splash_selected_index: 0,
     }
 }
 
@@ -103,6 +103,8 @@ fn sample_wallpaper(id: &str) -> Wallpaper {
         photographer: "Unknown".to_string(),
         width: Some(1920),
         height: Some(1080),
+        ratio: Some("16x9".to_string()),
+        file_size: Some(1_800_000),
         avg_color: None,
         attribution: None,
         file_type: Some("image/jpeg".to_string()),
@@ -170,11 +172,10 @@ fn go_back_no_previous_goes_to_splash() {
 fn navigate_screens_chain() {
     let mut app = make_app();
     app.navigate_to(Screen::Search);
-    app.navigate_to(Screen::Detail);
     app.navigate_to(Screen::ResolutionSelect);
     assert_eq!(app.current_screen, Screen::ResolutionSelect);
     app.go_back();
-    assert_eq!(app.current_screen, Screen::Detail);
+    assert_eq!(app.current_screen, Screen::Search);
     app.go_back();
     assert_eq!(app.current_screen, Screen::Splash);
 }
@@ -579,30 +580,4 @@ fn reset_search_page_sets_to_one() {
     assert_eq!(app.search_page, 1);
 }
 
-// --- Theme selection ---
 
-#[test]
-fn theme_select_starts_at_current_theme() {
-    let mut app = make_app();
-    app.config.theme_name = "solar".to_string();
-    app.enter_theme_select();
-    assert_eq!(app.current_screen, Screen::ThemeSelect);
-    let themes = walltui::ui::theme::builtin_theme_names();
-    let expected = themes.iter().position(|t| *t == "solar").unwrap();
-    assert_eq!(app.theme_selected_index, expected);
-}
-
-#[test]
-fn theme_select_navigate_and_apply_changes_theme() {
-    let mut app = make_app();
-    app.config.theme_name = "dark".to_string();
-    let dark_bg = app.theme.background;
-
-    app.enter_theme_select();
-    app.theme_selected_index = 1; // light
-    let name = walltui::ui::theme::builtin_theme_names()[1];
-    app.apply_theme(name);
-
-    assert_eq!(app.config.theme_name, "light");
-    assert_ne!(app.theme.background, dark_bg);
-}

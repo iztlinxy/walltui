@@ -110,31 +110,6 @@ async fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<bool> {
     Ok(false)
 }
 
-async fn handle_theme_select_event(app: &mut App, key: KeyCode) -> bool {
-    match key {
-        KeyCode::Esc => app.go_back(),
-        KeyCode::Up | KeyCode::Char('k') => {
-            if app.theme_selected_index > 0 {
-                app.theme_selected_index -= 1;
-            }
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            let themes = walltui::ui::theme::builtin_theme_names();
-            if app.theme_selected_index + 1 < themes.len() {
-                app.theme_selected_index += 1;
-            }
-        }
-        KeyCode::Enter => {
-            let themes = walltui::ui::theme::builtin_theme_names();
-            if let Some(name) = themes.get(app.theme_selected_index) {
-                app.apply_theme(name);
-            }
-        }
-        _ => {}
-    }
-    true
-}
-
 async fn handle_screen_event(
     app: &mut App,
     key: KeyCode,
@@ -143,12 +118,10 @@ async fn handle_screen_event(
     let dirty = match app.current_screen {
         Screen::Splash => handle_splash_event(app, key),
         Screen::Search => handle_search_event(app, key, modifiers).await,
-        Screen::Detail => handle_detail_event(app, key).await,
         Screen::Download => handle_download_event(app, key).await,
         Screen::Config => handle_config_event(app, key, modifiers),
         Screen::Gallery => handle_gallery_event(app, key, modifiers).await,
         Screen::ResolutionSelect => handle_resolution_select_event(app, key).await,
-        Screen::ThemeSelect => handle_theme_select_event(app, key).await,
     };
     Ok(dirty)
 }
@@ -161,6 +134,9 @@ fn handle_splash_event(app: &mut App, key: KeyCode) -> bool {
             app.navigate_to(Screen::Gallery);
         }
         KeyCode::Char('c') => app.navigate_to(Screen::Config),
+        KeyCode::Up | KeyCode::Char('k') => app.splash_move_up(),
+        KeyCode::Down | KeyCode::Char('j') => app.splash_move_down(),
+        KeyCode::Enter => app.splash_select(),
         _ => {}
     }
     true
@@ -220,11 +196,13 @@ async fn handle_search_event(app: &mut App, key: KeyCode, modifiers: KeyModifier
             KeyCode::Down | KeyCode::Char('j') => app.move_selection_down(),
             KeyCode::Enter => {
                 if !app.wallpapers.is_empty() {
-                    app.navigate_to(Screen::Detail);
+                    app.start_selected_download();
                 }
             }
             KeyCode::Char('d') => {
-                app.navigate_to(Screen::Download);
+                if !app.wallpapers.is_empty() {
+                    app.save_selected_original();
+                }
             }
             KeyCode::Char('n') if !app.search_query.is_empty() => {
                 app.search_next_page().await;
@@ -237,27 +215,6 @@ async fn handle_search_event(app: &mut App, key: KeyCode, modifiers: KeyModifier
             }
             _ => {}
         }
-    }
-    true
-}
-
-async fn handle_detail_event(app: &mut App, key: KeyCode) -> bool {
-    match key {
-        KeyCode::Esc => app.go_back(),
-        KeyCode::Char('d') => {
-            if let Some(wallpaper) = app.wallpapers.get(app.selected_index).cloned() {
-                app.pending_download_wallpaper = Some(wallpaper);
-                app.resolution_selected_index = 0;
-                app.navigate_to(Screen::ResolutionSelect);
-            }
-        }
-        KeyCode::Char('o') => {
-            if let Some(wallpaper) = app.wallpapers.get(app.selected_index) {
-                let url = wallpaper.web_url.as_deref().unwrap_or(&wallpaper.url);
-                let _ = open::that(url);
-            }
-        }
-        _ => {}
     }
     true
 }
@@ -306,24 +263,28 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> 
     } else {
         match key {
             KeyCode::Esc => app.go_back(),
-            KeyCode::Enter => {
-                let field = app.config_fields[app.config_selected_index];
-                if matches!(field, walltui::ui::screens::config::ConfigField::ThemeName) {
-                    app.enter_theme_select();
-                } else {
-                    app.start_config_edit();
-                }
-            }
+            KeyCode::Enter => app.start_config_edit(),
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                let field = app.config_fields[app.config_selected_index];
-                if matches!(field, walltui::ui::screens::config::ConfigField::ThemeName) {
-                    app.enter_theme_select();
-                } else {
-                    app.start_config_edit();
-                }
+                app.start_config_edit();
             }
             KeyCode::Up | KeyCode::Char('k') => app.move_config_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => app.move_config_selection_down(),
+            KeyCode::Left => {
+                if matches!(
+                    app.config_fields[app.config_selected_index],
+                    walltui::ui::screens::config::ConfigField::CursorStyle
+                ) {
+                    app.cycle_cursor_style_left();
+                }
+            }
+            KeyCode::Right => {
+                if matches!(
+                    app.config_fields[app.config_selected_index],
+                    walltui::ui::screens::config::ConfigField::CursorStyle
+                ) {
+                    app.cycle_cursor_style_right();
+                }
+            }
             _ => {}
         }
     }

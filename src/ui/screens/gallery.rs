@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
@@ -12,7 +12,6 @@ use ratatui_image::thread::ThreadProtocol;
 use crate::core::models::Wallpaper;
 use crate::ui::theme::{StyleKey, Theme};
 use crate::ui::widgets::dialog::ConfirmDialog;
-use crate::ui::widgets::help_bar::HelpBar;
 use crate::ui::widgets::image_list::ImageList;
 
 pub struct GalleryScreen<'a> {
@@ -110,7 +109,7 @@ impl<'a> GalleryScreen<'a> {
             .render(frame, chunks[1]);
         }
 
-        let help_shortcuts: Vec<(&str, &str)> = if self.editing {
+        let items: Vec<(&str, &str)> = if self.editing {
             vec![("Enter", "Confirm"), ("Esc", "Cancel")]
         } else {
             vec![
@@ -122,7 +121,33 @@ impl<'a> GalleryScreen<'a> {
                 ("Esc", "Back"),
             ]
         };
-        HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[2]);
+        let spans: Vec<Span> = items
+            .iter()
+            .enumerate()
+            .flat_map(|(i, (key, desc))| {
+                let mut parts = vec![
+                    Span::styled(
+                        format!("[ {key} ]"),
+                        self.theme
+                            .resolve(StyleKey::Secondary)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(format!(" {desc}")),
+                ];
+                if i < items.len() - 1 {
+                    parts.push(Span::raw("  "));
+                }
+                parts
+            })
+            .collect();
+        let footer = Paragraph::new(Line::from(spans))
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(self.theme.resolve(StyleKey::Border)),
+            );
+        frame.render_widget(footer, chunks[2]);
 
         if let Some(dialog) = self.confirm_dialog {
             self.render_confirm_dialog(frame, area, dialog);

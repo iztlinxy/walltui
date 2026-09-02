@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::ui::theme::Theme;
+use crate::ui::theme::{StyleKey, Theme};
 
 pub struct SearchBar<'a> {
     query: &'a str,
@@ -13,16 +13,23 @@ pub struct SearchBar<'a> {
     focused: bool,
     cursor_visible: bool,
     cursor_style: &'a str,
+    purity_label: &'a str,
+    category_label: &'a str,
+    sort_label: &'a str,
     theme: &'a Theme,
 }
 
 impl<'a> SearchBar<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         query: &'a str,
         cursor_pos: usize,
         focused: bool,
         cursor_visible: bool,
         cursor_style: &'a str,
+        purity_label: &'a str,
+        category_label: &'a str,
+        sort_label: &'a str,
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -31,12 +38,14 @@ impl<'a> SearchBar<'a> {
             focused,
             cursor_visible,
             cursor_style,
+            purity_label,
+            category_label,
+            sort_label,
             theme,
         }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
-        use crate::ui::theme::StyleKey;
         let border_style = if self.focused {
             self.theme.resolve(StyleKey::BorderFocused)
         } else {
@@ -61,9 +70,28 @@ impl<'a> SearchBar<'a> {
             Span::raw(after),
         ]);
 
+        let badge_style = self.theme.resolve(StyleKey::Secondary);
+        let badge_spans: Vec<Span> = [
+            self.purity_label,
+            self.category_label,
+            self.sort_label,
+        ]
+        .iter()
+        .filter(|s| !s.is_empty())
+        .flat_map(|label| {
+            vec![
+                Span::styled("[", badge_style),
+                Span::styled(*label, badge_style.add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled("]", badge_style),
+                Span::raw(" "),
+            ]
+        })
+        .collect();
+
         let search_bar = Paragraph::new(input_line).block(
             Block::default()
-                .title(" Search ")
+                .title_top(Line::from(Span::styled(" Search ", self.theme.resolve(StyleKey::Title))).left_aligned())
+                .title_top(Line::from(badge_spans).right_aligned())
                 .borders(Borders::ALL)
                 .border_style(border_style),
         );

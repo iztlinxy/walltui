@@ -12,6 +12,8 @@ fn sample_wallpaper() -> Wallpaper {
         photographer: "Unknown".to_string(),
         width: Some(1920),
         height: Some(1080),
+        ratio: Some("16x9".to_string()),
+        file_size: Some(1_800_000),
         avg_color: Some("#ff0000".to_string()),
         attribution: None,
         file_type: Some("image/jpeg".to_string()),
@@ -273,7 +275,7 @@ fn wallhaven_to_wallpaper_maps_fields() {
         wallpaper.thumb_url,
         "https://th.wallhaven.cc/large/abc999.png"
     );
-    assert_eq!(wallpaper.title, "Wallhaven abc999");
+    assert_eq!(wallpaper.title, "anime");
     assert_eq!(wallpaper.width, Some(2560));
     assert_eq!(wallpaper.height, Some(1440));
     assert_eq!(wallpaper.file_type, Some("image/png".to_string()));
@@ -388,15 +390,25 @@ mod wallhaven_test {
     impl WallhavenWallpaper {
         pub fn to_wallpaper(&self) -> walltui::core::models::Wallpaper {
             let tags: Vec<String> = self.tags.iter().map(|t| t.name.clone()).collect();
+            let title = tags
+                .first()
+                .cloned()
+                .unwrap_or_else(|| format!("Wallhaven {}", self.id));
             walltui::core::models::Wallpaper {
                 id: self.id.clone(),
                 provider: walltui::core::models::Provider::Wallhaven,
                 url: self.path.clone(),
                 thumb_url: self.thumbs.large.clone(),
-                title: format!("Wallhaven {}", self.id),
+                title,
                 photographer: "Unknown".to_string(),
                 width: Some(self.dimension_x),
                 height: Some(self.dimension_y),
+                ratio: if self.ratio.is_empty() {
+                    None
+                } else {
+                    Some(self.ratio.clone())
+                },
+                file_size: Some(self.file_size),
                 avg_color: self.colors.first().cloned(),
                 attribution: None,
                 file_type: if self.file_type.is_empty() {

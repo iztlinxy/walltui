@@ -39,22 +39,21 @@ impl<'a> AppLayout<'a> {
             .split(frame.area());
 
         let mut header_spans = vec![
-            Span::styled(" WallTUI ", Style::default().fg(self.theme.primary).bold()),
-            Span::raw(" | Provider: "),
+            Span::styled(
+                format!("WALLTUI v{}", env!("CARGO_PKG_VERSION")),
+                Style::default().fg(self.theme.fg_primary).bold(),
+            ),
+            Span::raw(" | [Provider: "),
             Span::styled(
                 self.active_provider,
-                Style::default().fg(self.theme.secondary),
+                Style::default().fg(self.theme.success),
             ),
+            Span::raw("]"),
         ];
         if let Some(toast) = self.toast {
             header_spans.push(Span::raw(" | "));
             header_spans.push(Span::styled(toast, Style::default().fg(self.theme.success)));
         }
-        header_spans.push(Span::raw(" | "));
-        header_spans.push(Span::styled(
-            " q quit ",
-            Style::default().fg(self.theme.error),
-        ));
 
         let header = Paragraph::new(Line::from(header_spans))
             .alignment(Alignment::Center)

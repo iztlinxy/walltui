@@ -84,4 +84,38 @@ impl AppConfig {
         std::fs::write(&path, content)?;
         Ok(())
     }
+
+    pub fn purity_label(&self) -> String {
+        let mut labels = Vec::new();
+        if self.purity_sfw {
+            labels.push("SFW");
+        }
+        if self.purity_sketchy {
+            labels.push("Sketchy");
+        }
+        if self.purity_nsfw {
+            labels.push("NSFW");
+        }
+        if labels.is_empty() {
+            labels.push("None");
+        }
+        labels.join("+")
+    }
+
+    pub fn category_label(&self) -> String {
+        let mut labels = Vec::new();
+        if self.category_general {
+            labels.push("General");
+        }
+        if self.category_anime {
+            labels.push("Anime");
+        }
+        if self.category_people {
+            labels.push("People");
+        }
+        if labels.is_empty() {
+            labels.push("None");
+        }
+        labels.join("+")
+    }
 }
