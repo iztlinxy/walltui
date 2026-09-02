@@ -147,5 +147,8 @@ fn cache_different_ttls() {
 fn cache_string_keys() {
     let mut cache = TtlCache::new(Duration::from_secs(60));
     cache.insert("wallpaper_123".to_string(), vec![1, 2, 3]);
-    assert_eq!(cache.get(&"wallpaper_123".to_string()), Some(&vec![1, 2, 3]));
+    assert_eq!(
+        cache.get(&"wallpaper_123".to_string()),
+        Some(&vec![1, 2, 3])
+    );
 }

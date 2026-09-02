@@ -188,13 +188,13 @@ Toggle purity and category filters directly from the Settings screen. Filters ar
 
 ## Configuration
 
-Stored at the OS config directory:
+WallTUI is Windows-only. All configuration and data live under `%USERPROFILE%\.config\walltui`:
 
-| Platform | Path |
-|----------|------|
-| Windows | `%APPDATA%\walltui\config.toml` |
-| Linux | `~/.config/walltui/config.toml` |
-| macOS | `~/Library/Application Support/walltui/config.toml` |
+| File | Path |
+|------|------|
+| Config | `%USERPROFILE%\.config\walltui\config.toml` |
+| Gallery index | `%USERPROFILE%\.config\walltui\gallery.json` |
+| Custom themes | `%USERPROFILE%\.config\walltui\themes\*.toml` |
 
 ```toml
 wallhaven_api_key = "your-key-here"

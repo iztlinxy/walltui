@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use ratatui_image::{Resize, StatefulImage, thread::ThreadProtocol};
 
 use crate::core::models::Wallpaper;
 use crate::ui::theme::Theme;
@@ -12,19 +13,23 @@ use crate::ui::theme::Theme;
 pub struct ImageCard<'a> {
     wallpaper: &'a Wallpaper,
     theme: &'a Theme,
-    thumbnail_lines: &'a [Line<'static>],
+    thumbnail_image: &'a mut Option<ThreadProtocol>,
 }
 
 impl<'a> ImageCard<'a> {
-    pub fn new(wallpaper: &'a Wallpaper, theme: &'a Theme, thumbnail_lines: &'a [Line<'static>]) -> Self {
+    pub fn new(
+        wallpaper: &'a Wallpaper,
+        theme: &'a Theme,
+        thumbnail_image: &'a mut Option<ThreadProtocol>,
+    ) -> Self {
         Self {
             wallpaper,
             theme,
-            thumbnail_lines,
+            thumbnail_image,
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
@@ -156,25 +161,28 @@ impl<'a> ImageCard<'a> {
         frame.render_widget(card, area);
     }
 
-    fn render_preview(&self, frame: &mut Frame, area: Rect) {
-        let lines: Vec<Line> = if self.thumbnail_lines.is_empty() {
-            vec![
+    fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
+        if let Some(image) = self.thumbnail_image.as_mut() {
+            frame.render_stateful_widget(
+                StatefulImage::default().resize(Resize::Crop(None)),
+                area,
+                image,
+            );
+        } else {
+            let preview = Paragraph::new(vec![
                 Line::from(Span::styled(
                     "Loading...",
                     Style::default().fg(Color::DarkGray),
                 ))
                 .centered(),
-            ]
-        } else {
-            self.thumbnail_lines.to_vec()
-        };
-
-        let preview = Paragraph::new(lines).block(
-            Block::default()
-                .title(" Preview ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(self.theme.primary)),
-        );
-        frame.render_widget(preview, area);
+            ])
+            .block(
+                Block::default()
+                    .title(" Preview ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(self.theme.primary)),
+            );
+            frame.render_widget(preview, area);
+        }
     }
 }

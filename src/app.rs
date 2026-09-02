@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use image::{DynamicImage, GenericImageView};
-use ratatui::{
-    Frame,
-    style::{Color, Style},
-    text::{Line, Span},
+use image::DynamicImage;
+use ratatui::Frame;
+use ratatui_image::{
+    picker::Picker,
+    thread::{ResizeRequest, ResizeResponse, ThreadProtocol},
 };
 use tokio::sync::mpsc;
 
@@ -24,8 +24,6 @@ use crate::ui::screens::gallery::GalleryScreen;
 use crate::ui::screens::resolution_select::{ResolutionOption, ResolutionSelectScreen};
 use crate::ui::screens::search::SearchScreen;
 use crate::ui::screens::splash::SplashScreen;
-use crate::ui::screens::ytdlp_input::YtDlpInputScreen;
-use crate::ui::screens::ytdlp_preview::YtDlpPreviewScreen;
 use crate::ui::screens::theme_select::ThemeSelectScreen;
 use crate::ui::theme::Theme;
 use crate::ui::theme_loader::ThemeLoader;
@@ -42,12 +40,16 @@ pub struct App {
     pub cursor_pos: usize,
     pub search_focused: bool,
     pub search_page: u32,
+    pub search_total_pages: u32,
     pub wallpapers: Vec<Wallpaper>,
     pub selected_index: usize,
+    pub search_fullscreen: bool,
     pub download_tasks: Vec<DownloadTask>,
     pub download_manager: Arc<DownloadManager>,
     pub download_rx: mpsc::Receiver<DownloadEvent>,
-    pub thumbnail_lines: Vec<Line<'static>>,
+    pub picker: Picker,
+    pub thumbnail_image: Option<ThreadProtocol>,
+    pub thumbnail_response_rx: Option<std::sync::mpsc::Receiver<ResizeResponse>>,
     pub thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
     pub thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
     pub thumbnail_loading_id: Option<String>,
@@ -60,11 +62,11 @@ pub struct App {
     pub config_editing: bool,
     pub gallery_wallpapers: Vec<Wallpaper>,
     pub gallery_selected_index: usize,
-    pub gallery_thumbnail_lines: Vec<Line<'static>>,
+    pub gallery_thumbnail_image: Option<ThreadProtocol>,
+    pub gallery_thumbnail_response_rx: Option<std::sync::mpsc::Receiver<ResizeResponse>>,
     pub gallery_thumbnail_rx: mpsc::Receiver<Option<DynamicImage>>,
     pub gallery_thumbnail_tx: mpsc::Sender<Option<DynamicImage>>,
     pub gallery_thumbnail_loading_id: Option<String>,
-    pub gallery_thumbnail_cache: std::collections::HashMap<String, Vec<Line<'static>>>,
     pub pending_download_wallpaper: Option<Wallpaper>,
     pub resolution_selected_index: usize,
     pub resolution_options: Vec<ResolutionOption>,
@@ -83,24 +85,11 @@ pub struct App {
     pub gallery_scan_rx: mpsc::Receiver<Vec<Wallpaper>>,
     pub gallery_scan_tx: mpsc::Sender<Vec<Wallpaper>>,
     pub gallery_loading: bool,
-    // yt-dlp state
-    pub ytdlp_url: String,
-    pub ytdlp_cursor_pos: usize,
-    pub ytdlp_focused: bool,
-    pub ytdlp_error: Option<String>,
-    pub ytdlp_wallpaper: Option<Wallpaper>,
-    pub ytdlp_clip_start: u64,
-    pub ytdlp_clip_end: u64,
-    pub ytdlp_downloading: bool,
-    pub ytdlp_download_progress: u8,
-    pub ytdlp_download_status: String,
-    pub ytdlp_progress_rx: Option<mpsc::Receiver<(u8, String)>>,
-    pub ytdlp_download_wallpaper: Option<Wallpaper>,
     pub theme_selected_index: usize,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(picker: Picker) -> Self {
         let (tx, rx) = mpsc::channel(100);
         let (thumb_tx, thumb_rx) = mpsc::channel(10);
         let (gallery_thumb_tx, gallery_thumb_rx) = mpsc::channel(10);
@@ -124,12 +113,16 @@ impl App {
             cursor_pos: 0,
             search_focused: false,
             search_page: 1,
+            search_total_pages: 1,
             wallpapers: Vec::new(),
             selected_index: 0,
+            search_fullscreen: false,
             download_tasks: Vec::new(),
             download_manager: manager,
             download_rx: rx,
-            thumbnail_lines: Vec::new(),
+            picker,
+            thumbnail_image: None,
+            thumbnail_response_rx: None,
             thumbnail_rx: thumb_rx,
             thumbnail_tx: thumb_tx,
             thumbnail_loading_id: None,
@@ -142,11 +135,11 @@ impl App {
             config_editing: false,
             gallery_wallpapers: Vec::new(),
             gallery_selected_index: 0,
-            gallery_thumbnail_lines: Vec::new(),
+            gallery_thumbnail_image: None,
+            gallery_thumbnail_response_rx: None,
             gallery_thumbnail_rx: gallery_thumb_rx,
             gallery_thumbnail_tx: gallery_thumb_tx,
             gallery_thumbnail_loading_id: None,
-            gallery_thumbnail_cache: std::collections::HashMap::new(),
             pending_download_wallpaper: None,
             resolution_selected_index: 0,
             resolution_options: ResolutionOption::presets(),
@@ -163,18 +156,6 @@ impl App {
             gallery_scan_rx,
             gallery_scan_tx,
             gallery_loading: false,
-            ytdlp_url: String::new(),
-            ytdlp_cursor_pos: 0,
-            ytdlp_focused: true,
-            ytdlp_error: None,
-            ytdlp_wallpaper: None,
-            ytdlp_clip_start: 0,
-            ytdlp_clip_end: 30,
-            ytdlp_downloading: false,
-            ytdlp_download_progress: 0,
-            ytdlp_download_status: String::new(),
-            ytdlp_progress_rx: None,
-            ytdlp_download_wallpaper: None,
             theme_selected_index: 0,
         }
     }
@@ -214,30 +195,45 @@ impl App {
         }
         self.download_tasks = new_tasks;
 
+        if let Some(rx) = &self.thumbnail_response_rx {
+            while let Ok(resp) = rx.try_recv() {
+                dirty = true;
+                if let Some(thumb) = self.thumbnail_image.as_mut() {
+                    thumb.update_resized_protocol(resp);
+                }
+            }
+        }
+
+        if let Some(rx) = &self.gallery_thumbnail_response_rx {
+            while let Ok(resp) = rx.try_recv() {
+                dirty = true;
+                if let Some(thumb) = self.gallery_thumbnail_image.as_mut() {
+                    thumb.update_resized_protocol(resp);
+                }
+            }
+        }
+
         while let Ok(img) = self.thumbnail_rx.try_recv() {
             dirty = true;
             if let Some(img) = img {
-                self.thumbnail_lines = image_to_lines(&img, 42, 18);
+                let (state, rx) = self.spawn_image_state(img);
+                self.thumbnail_image = Some(state);
+                self.thumbnail_response_rx = Some(rx);
             } else {
-                self.thumbnail_lines = Vec::new();
+                self.thumbnail_image = None;
+                self.thumbnail_response_rx = None;
             }
         }
 
         while let Ok(img) = self.gallery_thumbnail_rx.try_recv() {
             dirty = true;
             if let Some(img) = img {
-                let lines = image_to_lines(&img, 60, 25);
-                if let Some(w) = self.gallery_wallpapers.get(self.gallery_selected_index) {
-                    if self.gallery_thumbnail_cache.len() >= 20 {
-                        if let Some(oldest) = self.gallery_thumbnail_cache.keys().next().cloned() {
-                            self.gallery_thumbnail_cache.remove(&oldest);
-                        }
-                    }
-                    self.gallery_thumbnail_cache.insert(w.id.clone(), lines.clone());
-                }
-                self.gallery_thumbnail_lines = lines;
+                let (state, rx) = self.spawn_image_state(img);
+                self.gallery_thumbnail_image = Some(state);
+                self.gallery_thumbnail_response_rx = Some(rx);
             } else {
-                self.gallery_thumbnail_lines = Vec::new();
+                self.gallery_thumbnail_image = None;
+                self.gallery_thumbnail_response_rx = None;
             }
         }
 
@@ -247,52 +243,12 @@ impl App {
             self.gallery_loading = false;
         }
 
-        if let Some(rx) = &mut self.ytdlp_progress_rx {
-            while let Ok((progress, status)) = rx.try_recv() {
-                dirty = true;
-                self.ytdlp_download_progress = progress;
-                self.ytdlp_download_status = status;
-
-                if progress >= 100 {
-                    self.ytdlp_downloading = false;
-                    if let Some(wp) = self.ytdlp_download_wallpaper.take() {
-                        let title = wp.title.clone();
-                        let id = wp.id.clone();
-                        let thumb_url = wp.thumb_url.clone();
-
-                        self.toast_manager.show(format!("Downloaded: {}", title));
-                        self.add_recent_download(&title);
-
-                        let video_dir = self.download_dir.join("videos");
-                        let duration = self.ytdlp_clip_end - self.ytdlp_clip_start;
-                        let video_path = video_dir.join(format!(
-                            "yt_dlp_{}_{}s_1920x1080.mp4",
-                            crate::providers::ytdlp::sanitize_id(&id),
-                            duration
-                        ));
-
-                        let video_wallpaper = Wallpaper {
-                            url: video_path.to_string_lossy().to_string(),
-                            thumb_url,
-                            title,
-                            is_video: true,
-                            ..wp
-                        };
-
-                        self.gallery_wallpapers.push(video_wallpaper);
-                    }
-                    self.ytdlp_progress_rx = None;
-                    break;
-                }
-            }
-        }
-
         if (self.current_screen == Screen::Detail || self.current_screen == Screen::Search)
             && let Some(wallpaper) = self.wallpapers.get(self.selected_index)
             && self.thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
         {
             self.thumbnail_loading_id = Some(wallpaper.id.clone());
-            self.thumbnail_lines = Vec::new();
+            self.thumbnail_image = None;
             let tx = self.thumbnail_tx.clone();
             let wallpaper = wallpaper.clone();
             tokio::spawn(async move {
@@ -304,18 +260,13 @@ impl App {
             && let Some(wallpaper) = self.gallery_wallpapers.get(self.gallery_selected_index)
             && self.gallery_thumbnail_loading_id.as_deref() != Some(&wallpaper.id)
         {
-            if let Some(cached) = self.gallery_thumbnail_cache.get(&wallpaper.id) {
-                self.gallery_thumbnail_lines = cached.clone();
-                self.gallery_thumbnail_loading_id = Some(wallpaper.id.clone());
-            } else {
-                self.gallery_thumbnail_loading_id = Some(wallpaper.id.clone());
-                self.gallery_thumbnail_lines = Vec::new();
-                let tx = self.gallery_thumbnail_tx.clone();
-                let path = PathBuf::from(&wallpaper.url);
-                tokio::spawn(async move {
-                    load_local_thumbnail_async(path, tx).await;
-                });
-            }
+            self.gallery_thumbnail_loading_id = Some(wallpaper.id.clone());
+            self.gallery_thumbnail_image = None;
+            let tx = self.gallery_thumbnail_tx.clone();
+            let path = PathBuf::from(&wallpaper.url);
+            tokio::spawn(async move {
+                load_local_thumbnail_async(path, tx).await;
+            });
         }
         dirty
     }
@@ -330,6 +281,23 @@ impl App {
         if self.recent_downloads.len() > 5 {
             self.recent_downloads.pop();
         }
+    }
+
+    fn spawn_image_state(
+        &self,
+        img: DynamicImage,
+    ) -> (ThreadProtocol, std::sync::mpsc::Receiver<ResizeResponse>) {
+        let (req_tx, req_rx) = std::sync::mpsc::channel::<ResizeRequest>();
+        let (resp_tx, resp_rx) = std::sync::mpsc::channel::<ResizeResponse>();
+        let state = ThreadProtocol::new(req_tx, Some(self.picker.new_resize_protocol(img)));
+        std::thread::spawn(move || {
+            while let Ok(req) = req_rx.recv() {
+                if let Ok(resp) = req.resize_encode() {
+                    let _ = resp_tx.send(resp);
+                }
+            }
+        });
+        (state, resp_rx)
     }
 
     pub fn navigate_to(&mut self, screen: Screen) {
@@ -350,7 +318,16 @@ impl App {
         self.active_provider = provider;
     }
 
-    pub fn cycle_theme(&mut self) {
+    pub fn toggle_search_fullscreen(&mut self) {
+        self.search_fullscreen = !self.search_fullscreen;
+    }
+
+    pub fn enter_theme_select(&mut self) {
+        let themes = crate::ui::theme::builtin_theme_names();
+        self.theme_selected_index = themes
+            .iter()
+            .position(|t| *t == self.config.theme_name)
+            .unwrap_or(0);
         self.navigate_to(Screen::ThemeSelect);
     }
 
@@ -362,32 +339,60 @@ impl App {
     }
 
     pub fn handle_search_input(&mut self, c: char) {
-        self.search_query.insert(self.cursor_pos, c);
-        self.cursor_pos += 1;
+        insert_char(&mut self.search_query, &mut self.cursor_pos, c);
     }
 
     pub fn handle_search_backspace(&mut self) {
-        if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
-            self.search_query.remove(self.cursor_pos);
-        }
+        backspace(&mut self.search_query, &mut self.cursor_pos);
     }
 
     pub fn handle_search_left(&mut self) {
-        if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
-        }
+        move_left(&mut self.cursor_pos);
     }
 
     pub fn handle_search_right(&mut self) {
-        if self.cursor_pos < self.search_query.len() {
-            self.cursor_pos += 1;
-        }
+        move_right(&self.search_query, &mut self.cursor_pos);
     }
 
     pub fn clear_search(&mut self) {
         self.search_query.clear();
         self.cursor_pos = 0;
+    }
+
+    pub fn handle_config_input(&mut self, c: char) {
+        insert_char(&mut self.config_input, &mut self.config_cursor, c);
+    }
+
+    pub fn handle_config_backspace(&mut self) {
+        backspace(&mut self.config_input, &mut self.config_cursor);
+    }
+
+    pub fn handle_config_left(&mut self) {
+        move_left(&mut self.config_cursor);
+    }
+
+    pub fn handle_config_right(&mut self) {
+        move_right(&self.config_input, &mut self.config_cursor);
+    }
+
+    pub fn handle_gallery_edit_input(&mut self, c: char) {
+        insert_char(
+            &mut self.gallery_edit_input,
+            &mut self.gallery_edit_cursor,
+            c,
+        );
+    }
+
+    pub fn handle_gallery_edit_backspace(&mut self) {
+        backspace(&mut self.gallery_edit_input, &mut self.gallery_edit_cursor);
+    }
+
+    pub fn handle_gallery_edit_left(&mut self) {
+        move_left(&mut self.gallery_edit_cursor);
+    }
+
+    pub fn handle_gallery_edit_right(&mut self) {
+        move_right(&self.gallery_edit_input, &mut self.gallery_edit_cursor);
     }
 
     pub fn move_selection_up(&mut self) {
@@ -415,19 +420,18 @@ impl App {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
             Provider::Wallhaven => config.wallhaven_api_key.clone(),
-            Provider::YtDlp => None,
         };
 
         let purity = build_purity_string(&config);
         let categories = build_category_string(&config);
 
         if config.purity_nsfw && api_key.is_none() {
-            self.toast_manager.show("NSFW requires a Wallhaven API key. Set it in Settings.".to_string());
+            self.toast_manager
+                .show("NSFW requires a Wallhaven API key. Set it in Settings.".to_string());
         }
 
         let adapter = create_provider(self.active_provider, api_key);
-        let mut builder = SearchQuery::builder(&self.search_query)
-            .page(self.search_page);
+        let mut builder = SearchQuery::builder(&self.search_query).page(self.search_page);
         if !purity.is_empty() {
             builder = builder.purity(purity);
         }
@@ -436,14 +440,15 @@ impl App {
         }
         let query = builder.build();
 
-        let results = adapter.search(&query).await.map_err(|e| {
+        let response = adapter.search(&query).await.map_err(|e| {
             let msg = e.to_string();
             self.wallpapers.clear();
             self.selected_index = 0;
             msg
         })?;
 
-        self.wallpapers = results;
+        self.wallpapers = response.wallpapers;
+        self.search_total_pages = response.total_pages;
         self.selected_index = 0;
         Ok(())
     }
@@ -482,7 +487,11 @@ impl App {
         }
     }
 
-    pub fn enqueue_download(&mut self, wallpaper: &Wallpaper, resolution: Option<ResolutionOption>) {
+    pub fn enqueue_download(
+        &mut self,
+        wallpaper: &Wallpaper,
+        resolution: Option<ResolutionOption>,
+    ) {
         let save_dir = self.download_dir.clone();
         let _ = std::fs::create_dir_all(&save_dir);
         let filename = generate_filename(wallpaper);
@@ -511,15 +520,12 @@ impl App {
     pub async fn clear_completed_downloads(&mut self) {
         self.download_manager.remove_completed().await;
     }
-    pub fn clear_notification(&mut self) {
-        self.toast_manager.toast = None;
-    }
 
     pub fn load_gallery(&mut self) {
         self.gallery_loading = true;
         self.gallery_wallpapers.clear();
         self.gallery_selected_index = 0;
-        self.gallery_thumbnail_lines = Vec::new();
+        self.gallery_thumbnail_image = None;
         self.gallery_thumbnail_loading_id = None;
         let dir = self.download_dir.clone();
         let tx = self.gallery_scan_tx.clone();
@@ -565,30 +571,6 @@ impl App {
         self.gallery_edit_cursor = 0;
     }
 
-    pub fn handle_gallery_edit_input(&mut self, c: char) {
-        self.gallery_edit_input.insert(self.gallery_edit_cursor, c);
-        self.gallery_edit_cursor += 1;
-    }
-
-    pub fn handle_gallery_edit_backspace(&mut self) {
-        if self.gallery_edit_cursor > 0 {
-            self.gallery_edit_cursor -= 1;
-            self.gallery_edit_input.remove(self.gallery_edit_cursor);
-        }
-    }
-
-    pub fn handle_gallery_edit_left(&mut self) {
-        if self.gallery_edit_cursor > 0 {
-            self.gallery_edit_cursor -= 1;
-        }
-    }
-
-    pub fn handle_gallery_edit_right(&mut self) {
-        if self.gallery_edit_cursor < self.gallery_edit_input.len() {
-            self.gallery_edit_cursor += 1;
-        }
-    }
-
     pub fn prompt_delete_gallery_selected(&mut self) {
         if let Some(wp) = self.gallery_wallpapers.get(self.gallery_selected_index) {
             self.confirm_dialog = Some(crate::ui::widgets::dialog::ConfirmDialog::new(
@@ -616,7 +598,11 @@ impl App {
     }
 
     pub fn confirm_gallery_rename(&mut self) {
-        let Some(wp) = self.gallery_wallpapers.get(self.gallery_selected_index).cloned() else {
+        let Some(wp) = self
+            .gallery_wallpapers
+            .get(self.gallery_selected_index)
+            .cloned()
+        else {
             return;
         };
         let new_name = self.gallery_edit_input.trim();
@@ -634,7 +620,8 @@ impl App {
         let new_filename = format!("{new_name}.{ext}");
         let new_path = old_path.with_file_name(&new_filename);
         if new_path.exists() {
-            self.toast_manager.show("Rename failed: name already exists");
+            self.toast_manager
+                .show("Rename failed: name already exists");
             self.cancel_gallery_rename();
             return;
         }
@@ -646,7 +633,8 @@ impl App {
         if let Err(e) = self.gallery_index.rename(&wp.id, &new_filename, new_path) {
             self.toast_manager.show(format!("Index update failed: {e}"));
         } else {
-            self.toast_manager.show(format!("Renamed to '{new_filename}'"));
+            self.toast_manager
+                .show(format!("Renamed to '{new_filename}'"));
         }
         self.cancel_gallery_rename();
         self.load_gallery();
@@ -687,9 +675,13 @@ impl App {
             ConfigField::PuritySfw => self.config.purity_sfw = !self.config.purity_sfw,
             ConfigField::PuritySketchy => self.config.purity_sketchy = !self.config.purity_sketchy,
             ConfigField::PurityNsfw => self.config.purity_nsfw = !self.config.purity_nsfw,
-            ConfigField::CategoryGeneral => self.config.category_general = !self.config.category_general,
+            ConfigField::CategoryGeneral => {
+                self.config.category_general = !self.config.category_general
+            }
             ConfigField::CategoryAnime => self.config.category_anime = !self.config.category_anime,
-            ConfigField::CategoryPeople => self.config.category_people = !self.config.category_people,
+            ConfigField::CategoryPeople => {
+                self.config.category_people = !self.config.category_people
+            }
             _ => return,
         }
         self.save_config();
@@ -707,30 +699,6 @@ impl App {
         }
     }
 
-    pub fn handle_config_input(&mut self, c: char) {
-        self.config_input.insert(self.config_cursor, c);
-        self.config_cursor += 1;
-    }
-
-    pub fn handle_config_backspace(&mut self) {
-        if self.config_cursor > 0 {
-            self.config_cursor -= 1;
-            self.config_input.remove(self.config_cursor);
-        }
-    }
-
-    pub fn handle_config_left(&mut self) {
-        if self.config_cursor > 0 {
-            self.config_cursor -= 1;
-        }
-    }
-
-    pub fn handle_config_right(&mut self) {
-        if self.config_cursor < self.config_input.len() {
-            self.config_cursor += 1;
-        }
-    }
-
     pub fn cancel_config_edit(&mut self) {
         self.config_editing = false;
     }
@@ -739,7 +707,11 @@ impl App {
         let field = self.config_fields[self.config_selected_index];
         match field {
             ConfigField::ApiKey => {
-                let val = if self.config_input.is_empty() { None } else { Some(self.config_input.clone()) };
+                let val = if self.config_input.is_empty() {
+                    None
+                } else {
+                    Some(self.config_input.clone())
+                };
                 self.config.wallhaven_api_key = val.clone();
                 self.save_config();
                 self.toast_manager.show(match val {
@@ -750,17 +722,22 @@ impl App {
             ConfigField::DownloadDir => {
                 let expanded = expand_tilde(&self.config_input);
                 if expanded.as_os_str().is_empty() {
-                    self.toast_manager.show("Download directory cannot be empty".to_string());
+                    self.toast_manager
+                        .show("Download directory cannot be empty".to_string());
                     return;
                 }
                 if let Err(e) = std::fs::create_dir_all(&expanded) {
-                    self.toast_manager.show(format!("Failed to create directory: {e}"));
+                    self.toast_manager
+                        .show(format!("Failed to create directory: {e}"));
                     return;
                 }
                 self.download_dir = expanded.clone();
                 self.config.download_dir = expanded;
                 self.save_config();
-                self.toast_manager.show(format!("Download dir saved: {}", self.download_dir.display()));
+                self.toast_manager.show(format!(
+                    "Download dir saved: {}",
+                    self.download_dir.display()
+                ));
             }
             ConfigField::ThemeName => {
                 let name = self.config_input.trim();
@@ -781,7 +758,8 @@ impl App {
                     self.save_config();
                     self.toast_manager.show(format!("Cursor style: {style}"));
                 } else {
-                    self.toast_manager.show("Cursor style must be block, line or underline");
+                    self.toast_manager
+                        .show("Cursor style must be block, line or underline");
                     return;
                 }
             }
@@ -794,125 +772,7 @@ impl App {
         let _ = self.config.save();
     }
 
-    // yt-dlp methods
-    pub fn handle_ytdlp_input(&mut self, c: char) {
-        self.ytdlp_url.insert(self.ytdlp_cursor_pos, c);
-        self.ytdlp_cursor_pos += 1;
-    }
-
-    pub fn handle_ytdlp_backspace(&mut self) {
-        if self.ytdlp_cursor_pos > 0 {
-            self.ytdlp_cursor_pos -= 1;
-            self.ytdlp_url.remove(self.ytdlp_cursor_pos);
-        }
-    }
-
-    pub fn handle_ytdlp_left(&mut self) {
-        if self.ytdlp_cursor_pos > 0 {
-            self.ytdlp_cursor_pos -= 1;
-        }
-    }
-
-    pub fn handle_ytdlp_right(&mut self) {
-        if self.ytdlp_cursor_pos < self.ytdlp_url.len() {
-            self.ytdlp_cursor_pos += 1;
-        }
-    }
-
-    pub async fn fetch_ytdlp_metadata(&mut self) {
-        if self.ytdlp_url.is_empty() {
-            self.ytdlp_error = Some("URL cannot be empty".to_string());
-            return;
-        }
-
-        self.ytdlp_error = None;
-        let url = self.ytdlp_url.clone();
-        let output_dir = self.download_dir.clone();
-
-        let adapter = crate::providers::ytdlp::YtDlpAdapter::new(output_dir);
-        match adapter.fetch_metadata(&url).await {
-            Ok(wallpaper) => {
-                if let Err(e) = crate::providers::ytdlp::YtDlpAdapter::validate_duration(wallpaper.duration_secs) {
-                    self.ytdlp_error = Some(e);
-                    return;
-                }
-
-                let duration = wallpaper.duration_secs.unwrap_or(30);
-                let clip_len = 30.min(duration);
-                let clip_start = duration / 2 - clip_len / 2;
-                let clip_end = clip_start + clip_len;
-
-                self.ytdlp_wallpaper = Some(wallpaper);
-                self.ytdlp_clip_start = clip_start;
-                self.ytdlp_clip_end = clip_end.min(duration);
-                self.navigate_to(Screen::YtDlpPreview);
-            }
-            Err(e) => {
-                self.ytdlp_error = Some(e);
-            }
-        }
-    }
-
-    pub async fn download_ytdlp_clip(&mut self) {
-        if self.ytdlp_downloading {
-            return;
-        }
-
-        let wallpaper = match &self.ytdlp_wallpaper {
-            Some(w) => w.clone(),
-            None => return,
-        };
-
-        self.ytdlp_downloading = true;
-        self.ytdlp_download_progress = 0;
-        self.ytdlp_download_status = "Starting...".to_string();
-        self.ytdlp_error = None;
-        self.ytdlp_download_wallpaper = Some(wallpaper.clone());
-
-        let url = wallpaper.url.clone();
-        let start = self.ytdlp_clip_start;
-        let duration = self.ytdlp_clip_end - self.ytdlp_clip_start;
-        let output_dir = self.download_dir.clone();
-
-        let adapter = crate::providers::ytdlp::YtDlpAdapter::new(output_dir);
-        let (progress_tx, progress_rx) = tokio::sync::mpsc::channel(100);
-
-        tokio::spawn(async move {
-            adapter.download_clip(&url, start, duration, progress_tx).await
-        });
-
-        self.ytdlp_progress_rx = Some(progress_rx);
-    }
-
-    pub fn adjust_clip_start(&mut self, delta: i64) {
-        let duration = self.ytdlp_wallpaper.as_ref().map(|w| w.duration_secs.unwrap_or(30)).unwrap_or(30);
-        let new_start = (self.ytdlp_clip_start as i64 + delta).max(0) as u64;
-        if new_start < self.ytdlp_clip_end {
-            self.ytdlp_clip_start = new_start.min(duration);
-        }
-    }
-
-    pub fn adjust_clip_end(&mut self, delta: i64) {
-        let duration = self.ytdlp_wallpaper.as_ref().map(|w| w.duration_secs.unwrap_or(30)).unwrap_or(30);
-        let new_end = (self.ytdlp_clip_end as i64 + delta).max(0) as u64;
-        if new_end > self.ytdlp_clip_start && new_end <= duration {
-            self.ytdlp_clip_end = new_end;
-        }
-    }
-
-    pub fn reset_ytdlp(&mut self) {
-        self.ytdlp_url.clear();
-        self.ytdlp_cursor_pos = 0;
-        self.ytdlp_error = None;
-        self.ytdlp_wallpaper = None;
-        self.ytdlp_downloading = false;
-        self.ytdlp_download_progress = 0;
-        self.ytdlp_download_status.clear();
-        self.ytdlp_progress_rx = None;
-        self.ytdlp_download_wallpaper = None;
-    }
-
-    pub fn draw(&self, frame: &mut Frame) {
+    pub fn draw(&mut self, frame: &mut Frame) {
         let toast = self.toast_manager.message();
         let body_area = AppLayout::new(
             &self.theme,
@@ -924,10 +784,10 @@ impl App {
 
         match self.current_screen {
             Screen::Splash => {
-                SplashScreen::new(&self.theme, &self.recent_downloads)
-                    .render(frame, body_area);
+                SplashScreen::new(&self.theme, &self.recent_downloads).render(frame, body_area);
             }
             Screen::Search => {
+                let thumbnail_image = &mut self.thumbnail_image;
                 SearchScreen::new(
                     &self.search_query,
                     self.cursor_pos,
@@ -937,14 +797,17 @@ impl App {
                     self.selected_index,
                     &self.wallpapers,
                     self.search_page,
-                    &self.thumbnail_lines,
+                    self.search_total_pages,
+                    thumbnail_image,
                     &self.theme,
                 )
+                .fullscreen(self.search_fullscreen)
                 .render(frame, body_area);
             }
             Screen::Detail => {
                 if let Some(wallpaper) = self.wallpapers.get(self.selected_index) {
-                    DetailScreen::new(wallpaper, &self.theme, &self.thumbnail_lines)
+                    let thumbnail_image = &mut self.thumbnail_image;
+                    DetailScreen::new(wallpaper, &self.theme, thumbnail_image)
                         .render(frame, body_area);
                 }
             }
@@ -967,10 +830,11 @@ impl App {
                 .render(frame, body_area);
             }
             Screen::Gallery => {
+                let gallery_thumbnail_image = &mut self.gallery_thumbnail_image;
                 GalleryScreen::new(
                     &self.gallery_wallpapers,
                     self.gallery_selected_index,
-                    &self.gallery_thumbnail_lines,
+                    gallery_thumbnail_image,
                     &self.theme,
                     &self.download_dir,
                     self.gallery_editing,
@@ -999,37 +863,13 @@ impl App {
                     .render(frame, body_area);
                 }
             }
-            Screen::YtDlpInput => {
-                YtDlpInputScreen::new(
-                    &self.ytdlp_url,
-                    self.ytdlp_cursor_pos,
-                    self.cursor_visible,
-                    &self.config.cursor_style,
-                    self.ytdlp_error.as_deref(),
+            Screen::ThemeSelect => {
+                ThemeSelectScreen::new(
+                    &self.config.theme_name,
                     &self.theme,
+                    self.theme_selected_index,
                 )
                 .render(frame, body_area);
-            }
-            Screen::YtDlpPreview => {
-                if let Some(wallpaper) = &self.ytdlp_wallpaper {
-                    YtDlpPreviewScreen::new(
-                        wallpaper,
-                        self.ytdlp_clip_start,
-                        self.ytdlp_clip_end,
-                        self.ytdlp_downloading,
-                        self.ytdlp_download_progress,
-                        &self.ytdlp_download_status,
-                        self.ytdlp_error.as_deref(),
-                        &self.theme,
-                    )
-                    .render(frame, body_area);
-                }
-            }
-            Screen::ThemeSelect => {
-                let themes = crate::ui::theme::builtin_theme_names();
-                let idx = themes.iter().position(|t| *t == self.config.theme_name).unwrap_or(0);
-                ThemeSelectScreen::new(&self.config.theme_name, &self.theme, idx)
-                    .render(frame, body_area);
             }
         }
     }
@@ -1054,15 +894,7 @@ fn is_image_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-fn is_video_file(path: &std::path::Path) -> bool {
-    path.extension()
-        .and_then(std::ffi::OsStr::to_str)
-        .map(|ext| matches!(ext.to_lowercase().as_str(), "mp4" | "webm" | "mkv" | "avi"))
-        .unwrap_or(false)
-}
-
 fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
-    let video_dir = dir.join("videos");
     let mut entries: Vec<Wallpaper> = std::fs::read_dir(dir)
         .ok()
         .into_iter()
@@ -1094,48 +926,9 @@ fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
                 purity: None,
                 views: None,
                 favorites: None,
-                is_video: false,
-                duration_secs: None,
-                clip_start_secs: None,
-                clip_end_secs: None,
             })
         })
         .collect();
-
-    if video_dir.exists() {
-        if let Ok(video_entries) = std::fs::read_dir(&video_dir) {
-            for entry in video_entries.flatten() {
-                let path = entry.path();
-                if path.is_file() && is_video_file(&path) {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                    let path_str = path.to_string_lossy().to_string();
-                    entries.push(Wallpaper {
-                        id: filename.clone(),
-                        provider: crate::core::models::Provider::YtDlp,
-                        url: path_str.clone(),
-                        thumb_url: path_str.clone(),
-                        title: filename.clone(),
-                        photographer: String::new(),
-                        width: Some(1920),
-                        height: Some(1080),
-                        avg_color: None,
-                        attribution: None,
-                        file_type: Some("video/mp4".to_string()),
-                        web_url: None,
-                        tags: Vec::new(),
-                        category: None,
-                        purity: None,
-                        views: None,
-                        favorites: None,
-                        is_video: true,
-                        duration_secs: None,
-                        clip_start_secs: None,
-                        clip_end_secs: None,
-                    });
-                }
-            }
-        }
-    }
 
     entries.sort_by(|a, b| a.title.cmp(&b.title));
     entries
@@ -1168,25 +961,6 @@ async fn load_thumbnail_async(wallpaper: Wallpaper, tx: mpsc::Sender<Option<Dyna
     let _ = tx.send(img).await;
 }
 
-fn image_to_lines(img: &DynamicImage, width: u32, height: u32) -> Vec<Line<'static>> {
-    let resized = img.resize_exact(width, height * 2, image::imageops::FilterType::Lanczos3);
-    let mut lines = Vec::with_capacity(height as usize);
-
-    for y in 0..height {
-        let mut spans = Vec::with_capacity(width as usize);
-        for x in 0..width {
-            let top = resized.get_pixel(x, y * 2);
-            let bottom = resized.get_pixel(x, y * 2 + 1);
-            let fg = Color::Rgb(top[0], top[1], top[2]);
-            let bg = Color::Rgb(bottom[0], bottom[1], bottom[2]);
-            spans.push(Span::styled("▀", Style::default().fg(fg).bg(bg)));
-        }
-        lines.push(Line::from(spans));
-    }
-
-    lines
-}
-
 fn build_purity_string(config: &AppConfig) -> String {
     let s = if config.purity_sfw { "1" } else { "0" };
     let k = if config.purity_sketchy { "1" } else { "0" };
@@ -1201,8 +975,32 @@ fn build_category_string(config: &AppConfig) -> String {
     format!("{g}{a}{p}")
 }
 
+fn insert_char(text: &mut String, cursor: &mut usize, c: char) {
+    text.insert(*cursor, c);
+    *cursor += 1;
+}
+
+fn backspace(text: &mut String, cursor: &mut usize) {
+    if *cursor > 0 {
+        *cursor -= 1;
+        text.remove(*cursor);
+    }
+}
+
+fn move_left(cursor: &mut usize) {
+    if *cursor > 0 {
+        *cursor -= 1;
+    }
+}
+
+fn move_right(text: &str, cursor: &mut usize) {
+    if *cursor < text.len() {
+        *cursor += 1;
+    }
+}
+
 impl Default for App {
     fn default() -> Self {
-        Self::new()
+        Self::new(Picker::halfblocks())
     }
 }

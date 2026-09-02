@@ -55,6 +55,7 @@ impl<'a> SearchBar<'a> {
         let (before, after) = self.query.split_at(self.cursor_pos.min(self.query.len()));
 
         let input_line = Line::from(vec![
+            Span::raw(" "),
             Span::raw(before),
             Span::styled(cursor, self.theme.resolve(StyleKey::Cursor)),
             Span::raw(after),

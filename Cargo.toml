@@ -1,6 +1,6 @@
 [package]
 name = "walltui"
-version = "1.1.0"
+version = "1.4.0"
 description = "Terminal Wallpaper Manager"
 authors = ["WallTUI"]
 license = "MIT"
@@ -28,8 +28,8 @@ tracing-appender = "0.2"
 futures-util = "0.3"
 dirs = "6"
 open = "5"
-sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+ratatui-image = { version = "11.0.6", default-features = false, features = ["crossterm"] }
 
 [patch.crates-io]
 zune-jpeg = { path = "vendor/zune-jpeg" }

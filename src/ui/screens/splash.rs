@@ -48,19 +48,37 @@ impl<'a> SplashScreen<'a> {
             .centered(),
         );
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::raw("v1.1.0")).centered());
+        lines.push(Line::from(Span::raw(format!("v{}", env!("CARGO_PKG_VERSION")))).centered());
         lines.push(Line::from(""));
         lines.push(
             Line::from(vec![
-                Span::styled("s", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "s",
+                    self.theme
+                        .resolve(StyleKey::Secondary)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::raw(" Search  "),
-                Span::styled("g", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "g",
+                    self.theme
+                        .resolve(StyleKey::Secondary)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::raw(" Gallery  "),
-                Span::styled("5", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
-                Span::raw(" yt-dlp  "),
-                Span::styled("c", self.theme.resolve(StyleKey::Secondary).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "c",
+                    self.theme
+                        .resolve(StyleKey::Secondary)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::raw(" Settings  "),
-                Span::styled("q", self.theme.resolve(StyleKey::Error).add_modifier(ratatui::style::Modifier::BOLD)),
+                Span::styled(
+                    "q",
+                    self.theme
+                        .resolve(StyleKey::Error)
+                        .add_modifier(ratatui::style::Modifier::BOLD),
+                ),
                 Span::raw(" Quit"),
             ])
             .centered(),
@@ -96,8 +114,12 @@ impl<'a> SplashScreen<'a> {
 
         frame.render_widget(splash, chunks[0]);
 
-        let help_shortcuts: Vec<(&str, &str)> =
-            vec![("s", "Search"), ("g", "Gallery"), ("5", "yt-dlp"), ("c", "Settings"), ("q", "Quit")];
+        let help_shortcuts: Vec<(&str, &str)> = vec![
+            ("s", "Search"),
+            ("g", "Gallery"),
+            ("c", "Settings"),
+            ("q", "Quit"),
+        ];
         HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[1]);
     }
 }

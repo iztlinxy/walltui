@@ -3,82 +3,53 @@ use std::str::FromStr;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BorderType {
+    #[default]
     Rounded,
     Plain,
     Double,
     Thick,
 }
 
-impl Default for BorderType {
-    fn default() -> Self {
-        Self::Rounded
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitleAlignment {
     Left,
+    #[default]
     Center,
     Right,
 }
 
-impl Default for TitleAlignment {
-    fn default() -> Self {
-        Self::Center
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Theme {
-    // Semantic colors
     pub primary: Color,
     pub secondary: Color,
     pub success: Color,
     pub warning: Color,
     pub error: Color,
     pub info: Color,
-
-    // Background layers
     pub bg_base: Color,
     pub bg_surface: Color,
     pub bg_overlay: Color,
     pub bg_selected: Color,
-
-    // Text
     pub fg_primary: Color,
     pub fg_secondary: Color,
     pub fg_disabled: Color,
     pub fg_contrast: Color,
-
-    // Borders
     pub border_default: Color,
     pub border_focused: Color,
     pub border_error: Color,
-
-    // Special
     pub cursor: Color,
     pub scrollbar: Color,
     pub scrollbar_thumb: Color,
-
-    // Legacy aliases for existing code
     pub background: Color,
     pub foreground: Color,
-
-    // Styles
     pub cursor_blink_rate_ms: u64,
     pub scrollbar_width: u8,
     pub border_type: BorderType,
     pub title_alignment: TitleAlignment,
-
-    // Animation
-    pub spinner_frames: Vec<String>,
-    pub progress_bar_filled: String,
-    pub progress_bar_empty: String,
-    pub progress_bar_half: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -111,7 +82,204 @@ fn hex(c: &str) -> Color {
     Color::from_str(c).unwrap_or(Color::White)
 }
 
+macro_rules! theme_builder {
+    ($name:ident, $($field:ident = $color:expr),* $(,)?) => {
+        pub fn $name() -> Self {
+            let mut t = Self::base();
+            $(t.$field = hex($color);)*
+            t
+        }
+    };
+}
+
 impl Theme {
+    fn base() -> Self {
+        Self {
+            primary: Color::White,
+            secondary: Color::White,
+            success: Color::White,
+            warning: Color::White,
+            error: Color::White,
+            info: Color::White,
+            bg_base: Color::Black,
+            bg_surface: Color::Black,
+            bg_overlay: Color::Black,
+            bg_selected: Color::Black,
+            fg_primary: Color::White,
+            fg_secondary: Color::White,
+            fg_disabled: Color::White,
+            fg_contrast: Color::White,
+            border_default: Color::White,
+            border_focused: Color::White,
+            border_error: Color::White,
+            cursor: Color::White,
+            scrollbar: Color::White,
+            scrollbar_thumb: Color::White,
+            background: Color::Black,
+            foreground: Color::White,
+            cursor_blink_rate_ms: 530,
+            scrollbar_width: 1,
+            border_type: BorderType::Rounded,
+            title_alignment: TitleAlignment::Center,
+        }
+    }
+
+    theme_builder! {
+        dark,
+        primary = "#61AFEF",
+        secondary = "#C678DD",
+        success = "#98C379",
+        warning = "#E5C07B",
+        error = "#E06C75",
+        info = "#56B6C2",
+        bg_base = "#282C34",
+        bg_surface = "#3E4451",
+        bg_overlay = "#4B5263",
+        bg_selected = "#2C313C",
+        fg_primary = "#ABB2BF",
+        fg_secondary = "#828997",
+        fg_disabled = "#5C6370",
+        fg_contrast = "#FFFFFF",
+        border_default = "#3E4451",
+        border_focused = "#61AFEF",
+        border_error = "#E06C75",
+        cursor = "#528BFF",
+        scrollbar = "#4B5263",
+        scrollbar_thumb = "#61AFEF",
+        background = "#282C34",
+        foreground = "#ABB2BF",
+    }
+
+    theme_builder! {
+        light,
+        primary = "#4078F2",
+        secondary = "#A626A4",
+        success = "#50A14F",
+        warning = "#C18401",
+        error = "#E45649",
+        info = "#0184BC",
+        bg_base = "#FAFAFA",
+        bg_surface = "#EAEAEB",
+        bg_overlay = "#D7D7D8",
+        bg_selected = "#E5E5E6",
+        fg_primary = "#383A42",
+        fg_secondary = "#696C77",
+        fg_disabled = "#A0A1A7",
+        fg_contrast = "#FFFFFF",
+        border_default = "#EAEAEB",
+        border_focused = "#4078F2",
+        border_error = "#E45649",
+        cursor = "#4078F2",
+        scrollbar = "#D7D7D8",
+        scrollbar_thumb = "#4078F2",
+        background = "#FAFAFA",
+        foreground = "#383A42",
+    }
+
+    theme_builder! {
+        midnight,
+        primary = "#82AAFF",
+        secondary = "#C792EA",
+        success = "#C3E88D",
+        warning = "#FFCB6B",
+        error = "#F07178",
+        info = "#89DDFF",
+        bg_base = "#0F111A",
+        bg_surface = "#1A1C2A",
+        bg_overlay = "#24263A",
+        bg_selected = "#1C1F2E",
+        fg_primary = "#B0BEC5",
+        fg_secondary = "#676E95",
+        fg_disabled = "#464B5D",
+        fg_contrast = "#FFFFFF",
+        border_default = "#1A1C2A",
+        border_focused = "#82AAFF",
+        border_error = "#F07178",
+        cursor = "#82AAFF",
+        scrollbar = "#24263A",
+        scrollbar_thumb = "#82AAFF",
+        background = "#0F111A",
+        foreground = "#B0BEC5",
+    }
+
+    theme_builder! {
+        solar,
+        primary = "#268BD2",
+        secondary = "#D33682",
+        success = "#859900",
+        warning = "#B58900",
+        error = "#DC322F",
+        info = "#2AA198",
+        bg_base = "#002B36",
+        bg_surface = "#073642",
+        bg_overlay = "#0A3A47",
+        bg_selected = "#083C4A",
+        fg_primary = "#839496",
+        fg_secondary = "#586E75",
+        fg_disabled = "#465A63",
+        fg_contrast = "#FDF6E3",
+        border_default = "#073642",
+        border_focused = "#268BD2",
+        border_error = "#DC322F",
+        cursor = "#268BD2",
+        scrollbar = "#0A3A47",
+        scrollbar_thumb = "#268BD2",
+        background = "#002B36",
+        foreground = "#839496",
+    }
+
+    theme_builder! {
+        forest,
+        primary = "#7FBBB3",
+        secondary = "#D699B6",
+        success = "#A7C080",
+        warning = "#DBBC7F",
+        error = "#E67E80",
+        info = "#83C092",
+        bg_base = "#232A2E",
+        bg_surface = "#2D353B",
+        bg_overlay = "#3A454A",
+        bg_selected = "#2B3338",
+        fg_primary = "#D3C6AA",
+        fg_secondary = "#7A8478",
+        fg_disabled = "#596259",
+        fg_contrast = "#232A2E",
+        border_default = "#2D353B",
+        border_focused = "#7FBBB3",
+        border_error = "#E67E80",
+        cursor = "#7FBBB3",
+        scrollbar = "#3A454A",
+        scrollbar_thumb = "#7FBBB3",
+        background = "#232A2E",
+        foreground = "#D3C6AA",
+    }
+
+    theme_builder! {
+        ocean,
+        primary = "#7AA2F7",
+        secondary = "#BB9AF7",
+        success = "#9ECE6A",
+        warning = "#E0AF68",
+        error = "#F7768E",
+        info = "#73DACA",
+        bg_base = "#1A1B26",
+        bg_surface = "#24283B",
+        bg_overlay = "#2E3248",
+        bg_selected = "#232534",
+        fg_primary = "#A9B1D6",
+        fg_secondary = "#565F89",
+        fg_disabled = "#414868",
+        fg_contrast = "#FFFFFF",
+        border_default = "#24283B",
+        border_focused = "#7AA2F7",
+        border_error = "#F7768E",
+        cursor = "#7AA2F7",
+        scrollbar = "#2E3248",
+        scrollbar_thumb = "#7AA2F7",
+        background = "#1A1B26",
+        foreground = "#A9B1D6",
+    }
+
     pub fn resolve(&self, key: StyleKey) -> Style {
         match key {
             StyleKey::Primary => Style::default().fg(self.primary),
@@ -121,7 +289,9 @@ impl Theme {
             StyleKey::Error => Style::default().fg(self.error),
             StyleKey::Info => Style::default().fg(self.info),
             StyleKey::Muted => Style::default().fg(self.fg_secondary),
-            StyleKey::Highlight => Style::default().fg(self.primary).add_modifier(Modifier::BOLD),
+            StyleKey::Highlight => Style::default()
+                .fg(self.primary)
+                .add_modifier(Modifier::BOLD),
             StyleKey::Border => Style::default().fg(self.border_default),
             StyleKey::BorderFocused => Style::default().fg(self.border_focused),
             StyleKey::BorderError => Style::default().fg(self.border_error),
@@ -143,246 +313,6 @@ impl Theme {
                 .bg(self.bg_selected)
                 .fg(self.fg_primary)
                 .add_modifier(Modifier::BOLD),
-        }
-    }
-
-    pub fn dark() -> Self {
-        Self {
-            primary: hex("#61AFEF"),
-            secondary: hex("#C678DD"),
-            success: hex("#98C379"),
-            warning: hex("#E5C07B"),
-            error: hex("#E06C75"),
-            info: hex("#56B6C2"),
-            bg_base: hex("#282C34"),
-            bg_surface: hex("#3E4451"),
-            bg_overlay: hex("#4B5263"),
-            bg_selected: hex("#2C313C"),
-            fg_primary: hex("#ABB2BF"),
-            fg_secondary: hex("#828997"),
-            fg_disabled: hex("#5C6370"),
-            fg_contrast: hex("#FFFFFF"),
-            border_default: hex("#3E4451"),
-            border_focused: hex("#61AFEF"),
-            border_error: hex("#E06C75"),
-            cursor: hex("#528BFF"),
-            scrollbar: hex("#4B5263"),
-            scrollbar_thumb: hex("#61AFEF"),
-            background: hex("#282C34"),
-            foreground: hex("#ABB2BF"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
-        }
-    }
-
-    pub fn light() -> Self {
-        Self {
-            primary: hex("#4078F2"),
-            secondary: hex("#A626A4"),
-            success: hex("#50A14F"),
-            warning: hex("#C18401"),
-            error: hex("#E45649"),
-            info: hex("#0184BC"),
-            bg_base: hex("#FAFAFA"),
-            bg_surface: hex("#EAEAEB"),
-            bg_overlay: hex("#D7D7D8"),
-            bg_selected: hex("#E5E5E6"),
-            fg_primary: hex("#383A42"),
-            fg_secondary: hex("#696C77"),
-            fg_disabled: hex("#A0A1A7"),
-            fg_contrast: hex("#FFFFFF"),
-            border_default: hex("#EAEAEB"),
-            border_focused: hex("#4078F2"),
-            border_error: hex("#E45649"),
-            cursor: hex("#4078F2"),
-            scrollbar: hex("#D7D7D8"),
-            scrollbar_thumb: hex("#4078F2"),
-            background: hex("#FAFAFA"),
-            foreground: hex("#383A42"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
-        }
-    }
-
-    pub fn midnight() -> Self {
-        Self {
-            primary: hex("#82AAFF"),
-            secondary: hex("#C792EA"),
-            success: hex("#C3E88D"),
-            warning: hex("#FFCB6B"),
-            error: hex("#F07178"),
-            info: hex("#89DDFF"),
-            bg_base: hex("#0F111A"),
-            bg_surface: hex("#1A1C2A"),
-            bg_overlay: hex("#24263A"),
-            bg_selected: hex("#1C1F2E"),
-            fg_primary: hex("#B0BEC5"),
-            fg_secondary: hex("#676E95"),
-            fg_disabled: hex("#464B5D"),
-            fg_contrast: hex("#FFFFFF"),
-            border_default: hex("#1A1C2A"),
-            border_focused: hex("#82AAFF"),
-            border_error: hex("#F07178"),
-            cursor: hex("#82AAFF"),
-            scrollbar: hex("#24263A"),
-            scrollbar_thumb: hex("#82AAFF"),
-            background: hex("#0F111A"),
-            foreground: hex("#B0BEC5"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
-        }
-    }
-
-    pub fn solar() -> Self {
-        Self {
-            primary: hex("#268BD2"),
-            secondary: hex("#D33682"),
-            success: hex("#859900"),
-            warning: hex("#B58900"),
-            error: hex("#DC322F"),
-            info: hex("#2AA198"),
-            bg_base: hex("#002B36"),
-            bg_surface: hex("#073642"),
-            bg_overlay: hex("#0A3A47"),
-            bg_selected: hex("#083C4A"),
-            fg_primary: hex("#839496"),
-            fg_secondary: hex("#586E75"),
-            fg_disabled: hex("#465A63"),
-            fg_contrast: hex("#FDF6E3"),
-            border_default: hex("#073642"),
-            border_focused: hex("#268BD2"),
-            border_error: hex("#DC322F"),
-            cursor: hex("#268BD2"),
-            scrollbar: hex("#0A3A47"),
-            scrollbar_thumb: hex("#268BD2"),
-            background: hex("#002B36"),
-            foreground: hex("#839496"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
-        }
-    }
-
-    pub fn forest() -> Self {
-        Self {
-            primary: hex("#7FBBB3"),
-            secondary: hex("#D699B6"),
-            success: hex("#A7C080"),
-            warning: hex("#DBBC7F"),
-            error: hex("#E67E80"),
-            info: hex("#83C092"),
-            bg_base: hex("#232A2E"),
-            bg_surface: hex("#2D353B"),
-            bg_overlay: hex("#3A454A"),
-            bg_selected: hex("#2B3338"),
-            fg_primary: hex("#D3C6AA"),
-            fg_secondary: hex("#7A8478"),
-            fg_disabled: hex("#596259"),
-            fg_contrast: hex("#232A2E"),
-            border_default: hex("#2D353B"),
-            border_focused: hex("#7FBBB3"),
-            border_error: hex("#E67E80"),
-            cursor: hex("#7FBBB3"),
-            scrollbar: hex("#3A454A"),
-            scrollbar_thumb: hex("#7FBBB3"),
-            background: hex("#232A2E"),
-            foreground: hex("#D3C6AA"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
-        }
-    }
-
-    pub fn ocean() -> Self {
-        Self {
-            primary: hex("#7AA2F7"),
-            secondary: hex("#BB9AF7"),
-            success: hex("#9ECE6A"),
-            warning: hex("#E0AF68"),
-            error: hex("#F7768E"),
-            info: hex("#73DACA"),
-            bg_base: hex("#1A1B26"),
-            bg_surface: hex("#24283B"),
-            bg_overlay: hex("#2E3248"),
-            bg_selected: hex("#232534"),
-            fg_primary: hex("#A9B1D6"),
-            fg_secondary: hex("#565F89"),
-            fg_disabled: hex("#414868"),
-            fg_contrast: hex("#FFFFFF"),
-            border_default: hex("#24283B"),
-            border_focused: hex("#7AA2F7"),
-            border_error: hex("#F7768E"),
-            cursor: hex("#7AA2F7"),
-            scrollbar: hex("#2E3248"),
-            scrollbar_thumb: hex("#7AA2F7"),
-            background: hex("#1A1B26"),
-            foreground: hex("#A9B1D6"),
-            cursor_blink_rate_ms: 530,
-            scrollbar_width: 1,
-            border_type: BorderType::Rounded,
-            title_alignment: TitleAlignment::Center,
-            spinner_frames: vec![
-                "-".to_string(),
-                "\\".to_string(),
-                "|".to_string(),
-                "/".to_string(),
-            ],
-            progress_bar_filled: "=".to_string(),
-            progress_bar_empty: " ".to_string(),
-            progress_bar_half: ">".to_string(),
         }
     }
 
@@ -415,15 +345,13 @@ impl Theme {
             scrollbar: hex(&colors.scrollbar),
             scrollbar_thumb: hex(&colors.scrollbar_thumb),
             background: hex(&colors.background.unwrap_or_else(|| colors.bg_base.clone())),
-            foreground: hex(&colors.foreground.unwrap_or_else(|| colors.fg_primary.clone())),
+            foreground: hex(&colors
+                .foreground
+                .unwrap_or_else(|| colors.fg_primary.clone())),
             cursor_blink_rate_ms: data.styles.cursor_blink_rate_ms,
             scrollbar_width: data.styles.scrollbar_width,
             border_type: data.styles.border_type,
             title_alignment: data.styles.title_alignment,
-            spinner_frames: data.animation.spinner_frames,
-            progress_bar_filled: data.animation.progress_bar_filled,
-            progress_bar_empty: data.animation.progress_bar_empty,
-            progress_bar_half: data.animation.progress_bar_half,
         }
     }
 
@@ -475,8 +403,6 @@ struct ThemeData {
     colors: ThemeColors,
     #[serde(default)]
     styles: ThemeStyles,
-    #[serde(default)]
-    animation: ThemeAnimation,
 }
 
 #[derive(Debug, Deserialize)]
@@ -563,32 +489,4 @@ fn default_blink_rate() -> u64 {
 
 fn default_scrollbar_width() -> u8 {
     1
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct ThemeAnimation {
-    #[serde(default = "default_spinner_frames")]
-    spinner_frames: Vec<String>,
-    #[serde(default = "default_progress_filled")]
-    progress_bar_filled: String,
-    #[serde(default = "default_progress_empty")]
-    progress_bar_empty: String,
-    #[serde(default = "default_progress_half")]
-    progress_bar_half: String,
-}
-
-fn default_spinner_frames() -> Vec<String> {
-    vec!["-".into(), "\\".into(), "|".into(), "/".into()]
-}
-
-fn default_progress_filled() -> String {
-    "=".into()
-}
-
-fn default_progress_empty() -> String {
-    " ".into()
-}
-
-fn default_progress_half() -> String {
-    ">".into()
 }

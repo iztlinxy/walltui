@@ -1,14 +1,14 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use ratatui_image::thread::ThreadProtocol;
 
 use crate::core::models::Wallpaper;
-use crate::ui::theme::Theme;
-use crate::ui::widgets::help_bar::HelpBar;
+use crate::ui::theme::{StyleKey, Theme};
 use crate::ui::widgets::image_list::ImageList;
 use crate::ui::widgets::search_bar::SearchBar;
 
@@ -21,8 +21,10 @@ pub struct SearchScreen<'a> {
     selected: usize,
     wallpapers: &'a [Wallpaper],
     search_page: u32,
-    thumbnail_lines: &'a [Line<'static>],
+    search_total_pages: u32,
+    thumbnail_image: &'a mut Option<ThreadProtocol>,
     theme: &'a Theme,
+    fullscreen: bool,
 }
 
 impl<'a> SearchScreen<'a> {
@@ -36,7 +38,8 @@ impl<'a> SearchScreen<'a> {
         selected: usize,
         wallpapers: &'a [Wallpaper],
         search_page: u32,
-        thumbnail_lines: &'a [Line<'static>],
+        search_total_pages: u32,
+        thumbnail_image: &'a mut Option<ThreadProtocol>,
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -48,12 +51,19 @@ impl<'a> SearchScreen<'a> {
             selected,
             wallpapers,
             search_page,
-            thumbnail_lines,
+            search_total_pages,
+            thumbnail_image,
             theme,
+            fullscreen: false,
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect) {
+    pub fn fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
+        self
+    }
+
+    pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -88,22 +98,48 @@ impl<'a> SearchScreen<'a> {
             ImageList::new(
                 self.wallpapers,
                 self.selected,
-                self.thumbnail_lines,
+                self.thumbnail_image,
                 self.theme,
             )
+            .fullscreen(self.fullscreen)
             .render(frame, chunks[1]);
         }
 
-        let page_text = format!("Page: {}", self.search_page);
-        let help_shortcuts: Vec<(&str, &str)> = vec![
+        self.render_footer(frame, chunks[2]);
+    }
+
+    fn render_footer(&self, frame: &mut Frame, area: Rect) {
+        let page_text = format!("Page {}/{}", self.search_page, self.search_total_pages);
+        let items = [
             ("/", "Search"),
             ("↑/↓", "Navigate"),
             ("n/p", &page_text),
             ("Enter", "View"),
             ("d", "Download"),
-            ("5", "yt-dlp"),
+            ("f", "Fullscreen"),
             ("Esc", "Back"),
         ];
-        HelpBar::new(&help_shortcuts, self.theme).render(frame, chunks[2]);
+        let spans: Vec<Span> = items
+            .iter()
+            .enumerate()
+            .flat_map(|(i, (key, desc))| {
+                let mut parts = vec![
+                    Span::styled(
+                        *key,
+                        self.theme
+                            .resolve(StyleKey::Secondary)
+                            .add_modifier(ratatui::style::Modifier::BOLD),
+                    ),
+                    Span::raw(format!(" {desc}")),
+                ];
+                if i < items.len() - 1 {
+                    parts.push(Span::raw(" | "));
+                }
+                parts
+            })
+            .collect();
+
+        let footer = Paragraph::new(Line::from(spans)).alignment(Alignment::Center);
+        frame.render_widget(footer, area);
     }
 }

@@ -32,10 +32,10 @@ impl ToastManager {
     }
 
     pub fn tick(&mut self) {
-        if let Some(toast) = &self.toast {
-            if toast.expired() {
-                self.toast = None;
-            }
+        if let Some(toast) = &self.toast
+            && toast.expired()
+        {
+            self.toast = None;
         }
     }
 

@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
+use ratatui_image::thread::ThreadProtocol;
 
 use crate::core::models::Wallpaper;
 use crate::ui::theme::{StyleKey, Theme};
@@ -17,7 +18,7 @@ use crate::ui::widgets::image_list::ImageList;
 pub struct GalleryScreen<'a> {
     wallpapers: &'a [Wallpaper],
     selected: usize,
-    thumbnail_lines: &'a [Line<'static>],
+    thumbnail_image: &'a mut Option<ThreadProtocol>,
     theme: &'a Theme,
     download_dir: &'a PathBuf,
     editing: bool,
@@ -34,7 +35,7 @@ impl<'a> GalleryScreen<'a> {
     pub fn new(
         wallpapers: &'a [Wallpaper],
         selected: usize,
-        thumbnail_lines: &'a [Line<'static>],
+        thumbnail_image: &'a mut Option<ThreadProtocol>,
         theme: &'a Theme,
         download_dir: &'a PathBuf,
         editing: bool,
@@ -48,7 +49,7 @@ impl<'a> GalleryScreen<'a> {
         Self {
             wallpapers,
             selected,
-            thumbnail_lines,
+            thumbnail_image,
             theme,
             download_dir,
             editing,
@@ -61,10 +62,14 @@ impl<'a> GalleryScreen<'a> {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
             .split(area);
 
         if self.editing {
@@ -96,8 +101,13 @@ impl<'a> GalleryScreen<'a> {
             );
             frame.render_widget(empty, chunks[1]);
         } else {
-            ImageList::new(self.wallpapers, self.selected, self.thumbnail_lines, self.theme)
-                .render(frame, chunks[1]);
+            ImageList::new(
+                self.wallpapers,
+                self.selected,
+                self.thumbnail_image,
+                self.theme,
+            )
+            .render(frame, chunks[1]);
         }
 
         let help_shortcuts: Vec<(&str, &str)> = if self.editing {
@@ -107,7 +117,6 @@ impl<'a> GalleryScreen<'a> {
                 ("↑/↓", "Navigate"),
                 ("Enter", "Open"),
                 ("w", "Set wallpaper"),
-                ("Shift+W", "Stop video"),
                 ("r", "Rename"),
                 ("d", "Delete"),
                 ("Esc", "Back"),
@@ -181,7 +190,9 @@ impl<'a> GalleryScreen<'a> {
     }
 
     fn render_confirm_dialog(&self, frame: &mut Frame, area: Rect, dialog: &ConfirmDialog) {
-        let width = (dialog.message.len() as u16 + 14).min(area.width - 4).max(30);
+        let width = (dialog.message.len() as u16 + 14)
+            .min(area.width - 4)
+            .max(30);
         let height = 5u16;
         let x = area.x + (area.width.saturating_sub(width)) / 2;
         let y = area.y + (area.height.saturating_sub(height)) / 2;

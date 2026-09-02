@@ -4,7 +4,7 @@ use std::pin::Pin;
 use serde::{Deserialize, Serialize};
 
 use crate::core::errors::AppError;
-use crate::core::models::{Provider, SearchQuery, Wallpaper};
+use crate::core::models::{Provider, SearchQuery, SearchResponse, Wallpaper};
 use crate::providers::ProviderAdapter;
 
 const BASE_URL: &str = "https://wallhaven.cc/api/v1";
@@ -25,10 +25,8 @@ impl WallhavenAdapter {
     fn build_search_url(&self, query: &SearchQuery, nsfw_enabled: bool) -> String {
         let mut url = format!("{BASE_URL}/search?q={}", query.query);
 
-        if nsfw_enabled {
-            if let Some(key) = &self.api_key {
-                url.push_str(&format!("&apikey={key}"));
-            }
+        if nsfw_enabled && let Some(key) = &self.api_key {
+            url.push_str(&format!("&apikey={key}"));
         }
 
         url.push_str("&sorting=random");
@@ -63,9 +61,17 @@ impl WallhavenAdapter {
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct WallhavenMeta {
+    #[serde(default)]
+    last_page: u32,
+}
+
 #[derive(Debug, Deserialize)]
 struct WallhavenResponse {
     data: Vec<WallhavenWallpaper>,
+    #[serde(default)]
+    meta: WallhavenMeta,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -164,10 +170,6 @@ impl WallhavenWallpaper {
             },
             views: Some(self.views),
             favorites: Some(self.favorites),
-            is_video: false,
-            duration_secs: None,
-            clip_start_secs: None,
-            clip_end_secs: None,
         }
     }
 }
@@ -176,9 +178,13 @@ impl ProviderAdapter for WallhavenAdapter {
     fn search<'a>(
         &'a self,
         query: &'a SearchQuery,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Wallpaper>, AppError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<SearchResponse, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let nsfw_enabled = query.purity.as_ref().map(|p| p.contains('1') && p.len() == 3 && p.chars().nth(2) == Some('1')).unwrap_or(false);
+            let nsfw_enabled = query
+                .purity
+                .as_ref()
+                .map(|p| p.contains('1') && p.len() == 3 && p.chars().nth(2) == Some('1'))
+                .unwrap_or(false);
             let url = self.build_search_url(query, nsfw_enabled);
             let response = self
                 .client
@@ -205,7 +211,13 @@ impl ProviderAdapter for WallhavenAdapter {
                 .await
                 .map_err(|e| AppError::Network(format!("Failed to parse response: {e}")))?;
 
-            Ok(wh_response.data.iter().map(|w| w.to_wallpaper()).collect())
+            let wallpapers: Vec<Wallpaper> =
+                wh_response.data.iter().map(|w| w.to_wallpaper()).collect();
+            let total_pages = wh_response.meta.last_page.max(1);
+            Ok(SearchResponse {
+                wallpapers,
+                total_pages,
+            })
         })
     }
 

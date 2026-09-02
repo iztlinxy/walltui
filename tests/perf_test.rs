@@ -39,7 +39,11 @@ fn startup_time_under_limit() {
         let _ = child_for_timeout.lock().unwrap().kill();
     });
 
-    let _ = child.lock().unwrap().wait().expect("failed to wait on child");
+    let _ = child
+        .lock()
+        .unwrap()
+        .wait()
+        .expect("failed to wait on child");
     timeout.join().expect("timeout thread panicked");
 
     let elapsed = start.elapsed();

@@ -4,4 +4,3 @@ pub mod infrastructure;
 pub mod platform;
 pub mod providers;
 pub mod ui;
-pub mod utils;

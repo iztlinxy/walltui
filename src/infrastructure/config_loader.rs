@@ -4,6 +4,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::models::Provider;
 
+fn walltui_dir() -> PathBuf {
+    // ponytail: project is Windows-only; keep a single .config dir under home.
+    dirs::home_dir()
+        .map(|home| home.join(".config").join("walltui"))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+pub fn config_path() -> PathBuf {
+    walltui_dir().join("config.toml")
+}
+
+pub fn data_path() -> PathBuf {
+    walltui_dir().join("gallery.json")
+}
+
+pub fn themes_dir() -> PathBuf {
+    walltui_dir().join("themes")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub wallhaven_api_key: Option<String>,
@@ -38,13 +57,8 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub fn config_path() -> PathBuf {
-        let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-        config_dir.join("walltui").join("config.toml")
-    }
-
     pub fn load() -> Self {
-        let path = Self::config_path();
+        let path = config_path();
         if path.exists() {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
@@ -62,7 +76,7 @@ impl AppConfig {
     }
 
     pub fn save(&self) -> std::io::Result<()> {
-        let path = Self::config_path();
+        let path = config_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }

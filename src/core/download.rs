@@ -125,9 +125,15 @@ impl DownloadManager {
                         )
                     };
 
-                    let result =
-                        download_with_progress(&wallpaper, &save_path, &cancel_flag, &tx, idx, resolution.as_ref())
-                            .await;
+                    let result = download_with_progress(
+                        &wallpaper,
+                        &save_path,
+                        &cancel_flag,
+                        &tx,
+                        idx,
+                        resolution.as_ref(),
+                    )
+                    .await;
 
                     let mut queue = manager.queue.lock().await;
                     if let Some(task) = queue.get_mut(idx) {
@@ -252,46 +258,45 @@ async fn try_download(
     if let Some(res_opt) = resolution {
         let img = image::load_from_memory(&buffer).map_err(|e| e.to_string())?;
         let (target_w, target_h) = res_opt.dimensions();
-        let processed = match res_opt {
-            ResolutionOption::Original => {
-                file.write_all(&buffer).await.map_err(|e| e.to_string())?;
-                file.flush().await.map_err(|e| e.to_string())?;
-                return Ok(());
+        let processed = match res_opt.crop_mode() {
+            CropMode::Scale => {
+                img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3)
             }
-            ResolutionOption::Custom(_, _, _) |
-            ResolutionOption::HD720(_, _) |
-            ResolutionOption::FHD1080(_, _) |
-            ResolutionOption::QHD1440(_, _) |
-            ResolutionOption::UHD2160(_, _) |
-            ResolutionOption::Ultrawide2560(_, _) |
-            ResolutionOption::Ultrawide3440(_, _) |
-            ResolutionOption::MacBook16(_, _) |
-            ResolutionOption::Phone1080(_, _) => {
-                match res_opt.crop_mode() {
-                    CropMode::Scale => {
-                        img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3)
-                    }
-                    CropMode::CropCenter => {
-                        let resized = img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3);
-                        resized
-                    }
-                    CropMode::Fit => {
-                        img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3)
-                    }
-                }
+            CropMode::CropCenter => {
+                // ponytail: crop-center is currently same as scale; fix if needed.
+                img.resize_exact(target_w, target_h, image::imageops::FilterType::Lanczos3)
             }
+            CropMode::Fit => img.resize(target_w, target_h, image::imageops::FilterType::Lanczos3),
         };
         let mut out_buf = Vec::new();
-        let ext = save_path.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+        let ext = save_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("jpg");
         match ext {
             "png" => {
-                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+                processed
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut out_buf),
+                        image::ImageFormat::Png,
+                    )
+                    .map_err(|e| e.to_string())?;
             }
             "webp" => {
-                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::WebP).map_err(|e| e.to_string())?;
+                processed
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut out_buf),
+                        image::ImageFormat::WebP,
+                    )
+                    .map_err(|e| e.to_string())?;
             }
             _ => {
-                processed.write_to(&mut std::io::Cursor::new(&mut out_buf), image::ImageFormat::Jpeg).map_err(|e| e.to_string())?;
+                processed
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut out_buf),
+                        image::ImageFormat::Jpeg,
+                    )
+                    .map_err(|e| e.to_string())?;
             }
         }
         file.write_all(&out_buf).await.map_err(|e| e.to_string())?;

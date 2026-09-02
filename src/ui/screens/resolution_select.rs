@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::ui::theme::Theme;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CropMode {
     Scale,
     CropCenter,
@@ -19,57 +19,60 @@ pub enum CropMode {
 pub enum ResolutionOption {
     Original,
     Custom(u32, u32, CropMode),
-    HD720(CropMode, bool),
-    FHD1080(CropMode, bool),
-    QHD1440(CropMode, bool),
-    UHD2160(CropMode, bool),
-    Ultrawide2560(CropMode, bool),
-    Ultrawide3440(CropMode, bool),
-    MacBook16(CropMode, bool),
-    Phone1080(CropMode, bool),
+    HD720(CropMode),
+    FHD1080(CropMode),
+    QHD1440(CropMode),
+    UHD2160(CropMode),
+    Ultrawide2560(CropMode),
+    Ultrawide3440(CropMode),
+    MacBook16(CropMode),
+    Phone1080(CropMode),
 }
 
 impl ResolutionOption {
     pub fn presets() -> Vec<ResolutionOption> {
         vec![
             ResolutionOption::Original,
-            ResolutionOption::HD720(CropMode::Scale, false),
-            ResolutionOption::FHD1080(CropMode::Scale, false),
-            ResolutionOption::QHD1440(CropMode::Scale, false),
-            ResolutionOption::UHD2160(CropMode::Scale, false),
-            ResolutionOption::Ultrawide2560(CropMode::CropCenter, false),
-            ResolutionOption::Ultrawide3440(CropMode::CropCenter, false),
-            ResolutionOption::MacBook16(CropMode::Fit, false),
-            ResolutionOption::Phone1080(CropMode::CropCenter, false),
+            ResolutionOption::HD720(CropMode::Scale),
+            ResolutionOption::FHD1080(CropMode::Scale),
+            ResolutionOption::QHD1440(CropMode::Scale),
+            ResolutionOption::UHD2160(CropMode::Scale),
+            ResolutionOption::Ultrawide2560(CropMode::CropCenter),
+            ResolutionOption::Ultrawide3440(CropMode::CropCenter),
+            ResolutionOption::MacBook16(CropMode::Fit),
+            ResolutionOption::Phone1080(CropMode::CropCenter),
         ]
     }
 
     pub fn label(&self) -> String {
-        match self {
-            ResolutionOption::Original => "Original (no resize)".to_string(),
-            ResolutionOption::HD720(mode, _) => format!("1280x720 (HD) - {}", mode_label(mode)),
-            ResolutionOption::FHD1080(mode, _) => format!("1920x1080 (FHD) - {}", mode_label(mode)),
-            ResolutionOption::QHD1440(mode, _) => format!("2560x1440 (QHD) - {}", mode_label(mode)),
-            ResolutionOption::UHD2160(mode, _) => format!("3840x2160 (4K) - {}", mode_label(mode)),
-            ResolutionOption::Ultrawide2560(mode, _) => format!("2560x1080 (UW) - {}", mode_label(mode)),
-            ResolutionOption::Ultrawide3440(mode, _) => format!("3440x1440 (UW+) - {}", mode_label(mode)),
-            ResolutionOption::MacBook16(mode, _) => format!("3072x1920 (MB 16\") - {}", mode_label(mode)),
-            ResolutionOption::Phone1080(mode, _) => format!("1080x1920 (Phone) - {}", mode_label(mode)),
-            ResolutionOption::Custom(w, h, mode) => format!("{w}x{h} - {}", mode_label(mode)),
-        }
+        let (name, dims, mode) = match self {
+            ResolutionOption::Original => return "Original (no resize)".to_string(),
+            ResolutionOption::HD720(m) => ("HD", (1280, 720), m),
+            ResolutionOption::FHD1080(m) => ("FHD", (1920, 1080), m),
+            ResolutionOption::QHD1440(m) => ("QHD", (2560, 1440), m),
+            ResolutionOption::UHD2160(m) => ("4K", (3840, 2160), m),
+            ResolutionOption::Ultrawide2560(m) => ("UW", (2560, 1080), m),
+            ResolutionOption::Ultrawide3440(m) => ("UW+", (3440, 1440), m),
+            ResolutionOption::MacBook16(m) => ("MB 16\"", (3072, 1920), m),
+            ResolutionOption::Phone1080(m) => ("Phone", (1080, 1920), m),
+            ResolutionOption::Custom(w, h, m) => {
+                return format!("{w}x{h} - {}", mode_label(m));
+            }
+        };
+        format!("{}x{} ({}) - {}", dims.0, dims.1, name, mode_label(mode))
     }
 
     pub fn dimensions(&self) -> (u32, u32) {
         match self {
             ResolutionOption::Original => (0, 0),
-            ResolutionOption::HD720(_, _) => (1280, 720),
-            ResolutionOption::FHD1080(_, _) => (1920, 1080),
-            ResolutionOption::QHD1440(_, _) => (2560, 1440),
-            ResolutionOption::UHD2160(_, _) => (3840, 2160),
-            ResolutionOption::Ultrawide2560(_, _) => (2560, 1080),
-            ResolutionOption::Ultrawide3440(_, _) => (3440, 1440),
-            ResolutionOption::MacBook16(_, _) => (3072, 1920),
-            ResolutionOption::Phone1080(_, _) => (1080, 1920),
+            ResolutionOption::HD720(_) => (1280, 720),
+            ResolutionOption::FHD1080(_) => (1920, 1080),
+            ResolutionOption::QHD1440(_) => (2560, 1440),
+            ResolutionOption::UHD2160(_) => (3840, 2160),
+            ResolutionOption::Ultrawide2560(_) => (2560, 1080),
+            ResolutionOption::Ultrawide3440(_) => (3440, 1440),
+            ResolutionOption::MacBook16(_) => (3072, 1920),
+            ResolutionOption::Phone1080(_) => (1080, 1920),
             ResolutionOption::Custom(w, h, _) => (*w, *h),
         }
     }
@@ -77,43 +80,36 @@ impl ResolutionOption {
     pub fn crop_mode(&self) -> CropMode {
         match self {
             ResolutionOption::Original => CropMode::Scale,
-            ResolutionOption::HD720(m, _) => m.clone(),
-            ResolutionOption::FHD1080(m, _) => m.clone(),
-            ResolutionOption::QHD1440(m, _) => m.clone(),
-            ResolutionOption::UHD2160(m, _) => m.clone(),
-            ResolutionOption::Ultrawide2560(m, _) => m.clone(),
-            ResolutionOption::Ultrawide3440(m, _) => m.clone(),
-            ResolutionOption::MacBook16(m, _) => m.clone(),
-            ResolutionOption::Phone1080(m, _) => m.clone(),
-            ResolutionOption::Custom(_, _, m) => m.clone(),
+            ResolutionOption::HD720(m)
+            | ResolutionOption::FHD1080(m)
+            | ResolutionOption::QHD1440(m)
+            | ResolutionOption::UHD2160(m)
+            | ResolutionOption::Ultrawide2560(m)
+            | ResolutionOption::Ultrawide3440(m)
+            | ResolutionOption::MacBook16(m)
+            | ResolutionOption::Phone1080(m)
+            | ResolutionOption::Custom(_, _, m) => *m,
         }
     }
 
     pub fn cycle_crop_mode(&mut self) {
-        match self {
-            ResolutionOption::HD720(m, _) |
-            ResolutionOption::FHD1080(m, _) |
-            ResolutionOption::QHD1440(m, _) |
-            ResolutionOption::UHD2160(m, _) |
-            ResolutionOption::Ultrawide2560(m, _) |
-            ResolutionOption::Ultrawide3440(m, _) |
-            ResolutionOption::MacBook16(m, _) |
-            ResolutionOption::Phone1080(m, _) => {
-                *m = match m {
-                    CropMode::Scale => CropMode::CropCenter,
-                    CropMode::CropCenter => CropMode::Fit,
-                    CropMode::Fit => CropMode::Scale,
-                };
-            }
-            ResolutionOption::Custom(_, _, m) => {
-                *m = match m {
-                    CropMode::Scale => CropMode::CropCenter,
-                    CropMode::CropCenter => CropMode::Fit,
-                    CropMode::Fit => CropMode::Scale,
-                };
-            }
-            _ => {}
-        }
+        let mode = match self {
+            ResolutionOption::Original => return,
+            ResolutionOption::HD720(m)
+            | ResolutionOption::FHD1080(m)
+            | ResolutionOption::QHD1440(m)
+            | ResolutionOption::UHD2160(m)
+            | ResolutionOption::Ultrawide2560(m)
+            | ResolutionOption::Ultrawide3440(m)
+            | ResolutionOption::MacBook16(m)
+            | ResolutionOption::Phone1080(m)
+            | ResolutionOption::Custom(_, _, m) => m,
+        };
+        *mode = match mode {
+            CropMode::Scale => CropMode::CropCenter,
+            CropMode::CropCenter => CropMode::Fit,
+            CropMode::Fit => CropMode::Scale,
+        };
     }
 }
 
@@ -153,7 +149,11 @@ impl<'a> ResolutionSelectScreen<'a> {
     pub fn render(&self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
             .split(area);
 
         let dims_str = match self.wallpaper_dims {
@@ -161,7 +161,10 @@ impl<'a> ResolutionSelectScreen<'a> {
             None => "unknown".to_string(),
         };
         let header = Paragraph::new(Line::from(vec![
-            Span::styled(" Select Resolution ", Style::default().fg(self.theme.primary).bold()),
+            Span::styled(
+                " Select Resolution ",
+                Style::default().fg(self.theme.primary).bold(),
+            ),
             Span::raw(format!(" | {} [{}]", self.wallpaper_title, dims_str)),
         ]))
         .block(

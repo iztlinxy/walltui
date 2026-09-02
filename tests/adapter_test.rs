@@ -21,10 +21,6 @@ fn sample_wallpaper() -> Wallpaper {
         purity: Some("sfw".to_string()),
         views: Some(1000),
         favorites: Some(50),
-        is_video: false,
-        duration_secs: None,
-        clip_start_secs: None,
-        clip_end_secs: None,
     }
 }
 
@@ -131,9 +127,7 @@ fn search_query_with_purity_and_categories() {
 
 #[test]
 fn search_query_with_color() {
-    let query = SearchQuery::builder("dark")
-        .color("#ff0000")
-        .build();
+    let query = SearchQuery::builder("dark").color("#ff0000").build();
     assert_eq!(query.color, Some("#ff0000".to_string()));
 }
 
@@ -271,8 +265,14 @@ fn wallhaven_to_wallpaper_maps_fields() {
 
     assert_eq!(wallpaper.id, "abc999");
     assert_eq!(wallpaper.provider, Provider::Wallhaven);
-    assert_eq!(wallpaper.url, "https://w.wallhaven.cc/full/xy/wallhaven-abc999.png");
-    assert_eq!(wallpaper.thumb_url, "https://th.wallhaven.cc/large/abc999.png");
+    assert_eq!(
+        wallpaper.url,
+        "https://w.wallhaven.cc/full/xy/wallhaven-abc999.png"
+    );
+    assert_eq!(
+        wallpaper.thumb_url,
+        "https://th.wallhaven.cc/large/abc999.png"
+    );
     assert_eq!(wallpaper.title, "Wallhaven abc999");
     assert_eq!(wallpaper.width, Some(2560));
     assert_eq!(wallpaper.height, Some(1440));
@@ -281,9 +281,15 @@ fn wallhaven_to_wallpaper_maps_fields() {
     assert_eq!(wallpaper.category, Some("anime".to_string()));
     assert_eq!(wallpaper.views, Some(999));
     assert_eq!(wallpaper.favorites, Some(42));
-    assert_eq!(wallpaper.tags, vec!["anime".to_string(), "scenery".to_string()]);
+    assert_eq!(
+        wallpaper.tags,
+        vec!["anime".to_string(), "scenery".to_string()]
+    );
     assert_eq!(wallpaper.avg_color, Some("#aabbcc".to_string()));
-    assert_eq!(wallpaper.web_url, Some("https://wallhaven.cc/w/abc999".to_string()));
+    assert_eq!(
+        wallpaper.web_url,
+        Some("https://wallhaven.cc/w/abc999".to_string())
+    );
 }
 
 #[test]
@@ -412,10 +418,6 @@ mod wallhaven_test {
                 },
                 views: Some(self.views),
                 favorites: Some(self.favorites),
-                is_video: false,
-                duration_secs: None,
-                clip_start_secs: None,
-                clip_end_secs: None,
             }
         }
     }

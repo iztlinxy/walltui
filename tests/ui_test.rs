@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use ratatui_image::picker::Picker;
 use tokio::sync::mpsc;
 
 use walltui::app::App;
@@ -45,12 +46,16 @@ fn make_app() -> App {
         cursor_pos: 0,
         search_focused: false,
         search_page: 1,
+        search_total_pages: 1,
         wallpapers: Vec::new(),
         selected_index: 0,
+        search_fullscreen: false,
         download_tasks: Vec::new(),
         download_manager: manager,
         download_rx: rx,
-        thumbnail_lines: Vec::new(),
+        picker: Picker::halfblocks(),
+        thumbnail_image: None,
+        thumbnail_response_rx: None,
         thumbnail_rx: thumb_rx,
         thumbnail_tx: thumb_tx,
         thumbnail_loading_id: None,
@@ -63,11 +68,11 @@ fn make_app() -> App {
         config_editing: false,
         gallery_wallpapers: Vec::new(),
         gallery_selected_index: 0,
-        gallery_thumbnail_lines: Vec::new(),
+        gallery_thumbnail_image: None,
+        gallery_thumbnail_response_rx: None,
         gallery_thumbnail_rx: gallery_rx,
         gallery_thumbnail_tx: gallery_tx,
         gallery_thumbnail_loading_id: None,
-        gallery_thumbnail_cache: std::collections::HashMap::new(),
         pending_download_wallpaper: None,
         resolution_selected_index: 0,
         resolution_options: ResolutionOption::presets(),
@@ -76,29 +81,17 @@ fn make_app() -> App {
         toast_manager: ToastManager::default(),
         recent_downloads: Vec::new(),
         confirm_dialog: None,
-            gallery_index: GalleryIndex::default(),
-            gallery_editing: false,
-            gallery_edit_input: String::new(),
-            gallery_edit_cursor: 0,
-            gallery_cursor_visible: true,
-            gallery_scan_rx,
-            gallery_scan_tx,
-            gallery_loading: false,
-            ytdlp_url: String::new(),
-            ytdlp_cursor_pos: 0,
-            ytdlp_focused: true,
-            ytdlp_error: None,
-            ytdlp_wallpaper: None,
-            ytdlp_clip_start: 0,
-            ytdlp_clip_end: 30,
-            ytdlp_downloading: false,
-            ytdlp_download_progress: 0,
-            ytdlp_download_status: String::new(),
-            ytdlp_progress_rx: None,
-            ytdlp_download_wallpaper: None,
-            theme_selected_index: 0,
-        }
+        gallery_index: GalleryIndex::default(),
+        gallery_editing: false,
+        gallery_edit_input: String::new(),
+        gallery_edit_cursor: 0,
+        gallery_cursor_visible: true,
+        gallery_scan_rx,
+        gallery_scan_tx,
+        gallery_loading: false,
+        theme_selected_index: 0,
     }
+}
 
 fn sample_wallpaper(id: &str) -> Wallpaper {
     Wallpaper {
@@ -119,10 +112,6 @@ fn sample_wallpaper(id: &str) -> Wallpaper {
         purity: None,
         views: None,
         favorites: None,
-        is_video: false,
-        duration_secs: None,
-        clip_start_secs: None,
-        clip_end_secs: None,
     }
 }
 
@@ -417,49 +406,50 @@ fn resolution_original_dimensions() {
 
 #[test]
 fn resolution_fhd_dimensions() {
-    let fhd = ResolutionOption::FHD1080(
-        walltui::ui::screens::resolution_select::CropMode::Scale,
-        false,
-    );
+    let fhd = ResolutionOption::FHD1080(walltui::ui::screens::resolution_select::CropMode::Scale);
     assert_eq!(fhd.dimensions(), (1920, 1080));
 }
 
 #[test]
 fn resolution_4k_dimension() {
-    let uhd = ResolutionOption::UHD2160(
-        walltui::ui::screens::resolution_select::CropMode::Scale,
-        false,
-    );
+    let uhd = ResolutionOption::UHD2160(walltui::ui::screens::resolution_select::CropMode::Scale);
     assert_eq!(uhd.dimensions(), (3840, 2160));
 }
 
 #[test]
 fn resolution_cycle_crop_mode() {
-    let mut opt = ResolutionOption::FHD1080(
-        walltui::ui::screens::resolution_select::CropMode::Scale,
-        false,
-    );
+    let mut opt =
+        ResolutionOption::FHD1080(walltui::ui::screens::resolution_select::CropMode::Scale);
     opt.cycle_crop_mode();
-    assert!(matches!(opt.crop_mode(), walltui::ui::screens::resolution_select::CropMode::CropCenter));
+    assert!(matches!(
+        opt.crop_mode(),
+        walltui::ui::screens::resolution_select::CropMode::CropCenter
+    ));
     opt.cycle_crop_mode();
-    assert!(matches!(opt.crop_mode(), walltui::ui::screens::resolution_select::CropMode::Fit));
+    assert!(matches!(
+        opt.crop_mode(),
+        walltui::ui::screens::resolution_select::CropMode::Fit
+    ));
     opt.cycle_crop_mode();
-    assert!(matches!(opt.crop_mode(), walltui::ui::screens::resolution_select::CropMode::Scale));
+    assert!(matches!(
+        opt.crop_mode(),
+        walltui::ui::screens::resolution_select::CropMode::Scale
+    ));
 }
 
 #[test]
 fn resolution_original_does_not_cycle() {
     let mut opt = ResolutionOption::Original;
     opt.cycle_crop_mode();
-    assert!(matches!(opt.crop_mode(), walltui::ui::screens::resolution_select::CropMode::Scale));
+    assert!(matches!(
+        opt.crop_mode(),
+        walltui::ui::screens::resolution_select::CropMode::Scale
+    ));
 }
 
 #[test]
 fn resolution_label_contains_dimensions() {
-    let fhd = ResolutionOption::FHD1080(
-        walltui::ui::screens::resolution_select::CropMode::Scale,
-        false,
-    );
+    let fhd = ResolutionOption::FHD1080(walltui::ui::screens::resolution_select::CropMode::Scale);
     let label = fhd.label();
     assert!(label.contains("1920x1080"));
 }
@@ -534,7 +524,10 @@ async fn download_manager_retry_failed() {
     manager.enqueue(task).await;
     manager.retry(0).await;
     let tasks = manager.tasks().await;
-    assert_eq!(tasks[0].status, walltui::core::download::DownloadStatus::Queued);
+    assert_eq!(
+        tasks[0].status,
+        walltui::core::download::DownloadStatus::Queued
+    );
     assert_eq!(tasks[0].progress, 0);
     assert!(!tasks[0].is_cancelled());
 }
@@ -545,7 +538,9 @@ async fn download_manager_len_and_empty() {
     assert!(manager.is_empty().await);
     assert_eq!(manager.len().await, 0);
     let wp = sample_wallpaper("dm6");
-    manager.enqueue(DownloadTask::new(wp, PathBuf::from("/tmp/test.jpg"))).await;
+    manager
+        .enqueue(DownloadTask::new(wp, PathBuf::from("/tmp/test.jpg")))
+        .await;
     assert!(!manager.is_empty().await);
     assert_eq!(manager.len().await, 1);
 }
@@ -582,4 +577,32 @@ fn reset_search_page_sets_to_one() {
     app.search_page = 5;
     app.reset_search_page();
     assert_eq!(app.search_page, 1);
+}
+
+// --- Theme selection ---
+
+#[test]
+fn theme_select_starts_at_current_theme() {
+    let mut app = make_app();
+    app.config.theme_name = "solar".to_string();
+    app.enter_theme_select();
+    assert_eq!(app.current_screen, Screen::ThemeSelect);
+    let themes = walltui::ui::theme::builtin_theme_names();
+    let expected = themes.iter().position(|t| *t == "solar").unwrap();
+    assert_eq!(app.theme_selected_index, expected);
+}
+
+#[test]
+fn theme_select_navigate_and_apply_changes_theme() {
+    let mut app = make_app();
+    app.config.theme_name = "dark".to_string();
+    let dark_bg = app.theme.background;
+
+    app.enter_theme_select();
+    app.theme_selected_index = 1; // light
+    let name = walltui::ui::theme::builtin_theme_names()[1];
+    app.apply_theme(name);
+
+    assert_eq!(app.config.theme_name, "light");
+    assert_ne!(app.theme.background, dark_bg);
 }

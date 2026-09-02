@@ -45,7 +45,8 @@ impl<'a> ThemeSelectScreen<'a> {
         .alignment(Alignment::Center);
         frame.render_widget(title, chunks[0]);
 
-        let items: Vec<ListItem> = self.themes
+        let items: Vec<ListItem> = self
+            .themes
             .iter()
             .map(|name| {
                 let is_current = *name == self.current_theme;
@@ -61,7 +62,10 @@ impl<'a> ThemeSelectScreen<'a> {
                 } else {
                     Style::default().fg(self.theme.foreground)
                 };
-                ListItem::new(Line::from(Span::styled(format!("{}{}", prefix, name), style)))
+                ListItem::new(Line::from(Span::styled(
+                    format!("{}{}", prefix, name),
+                    style,
+                )))
             })
             .collect();
 

@@ -19,7 +19,8 @@ async fn main() -> color_eyre::Result<()> {
 
     if std::env::var("WALLTUI_HEADLESS").is_ok() {
         let start = Instant::now();
-        let mut app = App::new();
+        let picker = ratatui_image::picker::Picker::halfblocks();
+        let mut app = App::new(picker);
         let _ = app.tick().await;
         app.quit();
         info!("Headless startup time: {:?}", start.elapsed());
@@ -27,7 +28,9 @@ async fn main() -> color_eyre::Result<()> {
     }
 
     let mut terminal = ratatui::init();
-    let result = run(&mut terminal).await;
+    let picker = ratatui_image::picker::Picker::from_query_stdio()
+        .unwrap_or_else(|_| ratatui_image::picker::Picker::halfblocks());
+    let result = run(&mut terminal, picker).await;
     ratatui::restore();
     info!("WallTUI exiting");
     result
@@ -54,8 +57,11 @@ fn init_panic_hook() {
     }));
 }
 
-async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
-    let mut app = App::new();
+async fn run(
+    terminal: &mut DefaultTerminal,
+    picker: ratatui_image::picker::Picker,
+) -> color_eyre::Result<()> {
+    let mut app = App::new(picker);
     let mut dirty = true;
 
     while !app.should_quit {
@@ -89,17 +95,15 @@ async fn handle_event(app: &mut App, event: Event) -> color_eyre::Result<bool> {
         && key.kind == KeyEventKind::Press
     {
         // Global shortcuts.
-        if key.code == KeyCode::Char('t')
-            && key.modifiers.contains(KeyModifiers::CONTROL)
-            && key.modifiers.contains(KeyModifiers::SHIFT)
-        {
-            app.cycle_theme();
-            return Ok(true);
-        }
-
         match key.code {
-            KeyCode::Char('q') => { app.quit(); return Ok(true); }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => { app.quit(); return Ok(true); }
+            KeyCode::Char('q') => {
+                app.quit();
+                return Ok(true);
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.quit();
+                return Ok(true);
+            }
             _ => return handle_screen_event(app, key.code, key.modifiers).await,
         }
     }
@@ -145,8 +149,6 @@ async fn handle_screen_event(
         Screen::Gallery => handle_gallery_event(app, key, modifiers).await,
         Screen::ResolutionSelect => handle_resolution_select_event(app, key).await,
         Screen::ThemeSelect => handle_theme_select_event(app, key).await,
-        Screen::YtDlpInput => handle_ytdlp_input_event(app, key, modifiers).await,
-        Screen::YtDlpPreview => handle_ytdlp_preview_event(app, key, modifiers).await,
     };
     Ok(dirty)
 }
@@ -165,35 +167,13 @@ fn handle_splash_event(app: &mut App, key: KeyCode) -> bool {
 }
 
 async fn paste_from_clipboard() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let output = tokio::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", "Get-Clipboard"])
-            .output()
-            .await
-            .ok()?;
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if text.is_empty() { None } else { Some(text) }
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let output = tokio::process::Command::new("xclip")
-            .args(["-selection", "clipboard", "-o"])
-            .output()
-            .await
-            .ok()?;
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if text.is_empty() { None } else { Some(text) }
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let output = tokio::process::Command::new("pbpaste")
-            .output()
-            .await
-            .ok()?;
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if text.is_empty() { None } else { Some(text) }
-    }
+    let output = tokio::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", "Get-Clipboard"])
+        .output()
+        .await
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
 }
 
 async fn handle_search_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> bool {
@@ -236,10 +216,6 @@ async fn handle_search_event(app: &mut App, key: KeyCode, modifiers: KeyModifier
                 app.search_focused = true;
             }
             KeyCode::Char('1') => app.switch_provider(Provider::Wallhaven),
-            KeyCode::Char('5') => {
-                app.reset_ytdlp();
-                app.navigate_to(Screen::YtDlpInput);
-            }
             KeyCode::Up | KeyCode::Char('k') => app.move_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => app.move_selection_down(),
             KeyCode::Enter => {
@@ -255,6 +231,9 @@ async fn handle_search_event(app: &mut App, key: KeyCode, modifiers: KeyModifier
             }
             KeyCode::Char('p') if !app.search_query.is_empty() => {
                 app.search_prev_page().await;
+            }
+            KeyCode::Char('f') => {
+                app.toggle_search_fullscreen();
             }
             _ => {}
         }
@@ -327,9 +306,21 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> 
     } else {
         match key {
             KeyCode::Esc => app.go_back(),
-            KeyCode::Enter => app.start_config_edit(),
+            KeyCode::Enter => {
+                let field = app.config_fields[app.config_selected_index];
+                if matches!(field, walltui::ui::screens::config::ConfigField::ThemeName) {
+                    app.enter_theme_select();
+                } else {
+                    app.start_config_edit();
+                }
+            }
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                app.start_config_edit();
+                let field = app.config_fields[app.config_selected_index];
+                if matches!(field, walltui::ui::screens::config::ConfigField::ThemeName) {
+                    app.enter_theme_select();
+                } else {
+                    app.start_config_edit();
+                }
             }
             KeyCode::Up | KeyCode::Char('k') => app.move_config_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => app.move_config_selection_down(),
@@ -339,7 +330,7 @@ fn handle_config_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> 
     true
 }
 
-async fn handle_gallery_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> bool {
+async fn handle_gallery_event(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> bool {
     if app.confirm_dialog.is_some() {
         match key {
             KeyCode::Char('y') | KeyCode::Char('Y') => app.confirm_gallery_delete(),
@@ -375,25 +366,13 @@ async fn handle_gallery_event(app: &mut App, key: KeyCode, modifiers: KeyModifie
         }
         KeyCode::Char('w') => {
             if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
-                if wallpaper.is_video() {
-                    let path = std::path::Path::new(&wallpaper.url);
-                    match walltui::platform::set_video_wallpaper(path) {
-                        Ok(()) => app.toast_manager.show("Video wallpaper set!"),
-                        Err(e) => app.toast_manager.show(format!("Failed to set video wallpaper: {e}")),
-                    }
-                } else {
-                    let path = std::path::Path::new(&wallpaper.url);
-                    match walltui::platform::set_wallpaper(path) {
-                        Ok(()) => app.toast_manager.show("Wallpaper set successfully"),
-                        Err(e) => app.toast_manager.show(format!("Failed to set wallpaper: {e}")),
-                    }
+                let path = std::path::Path::new(&wallpaper.url);
+                match walltui::platform::set_wallpaper(path) {
+                    Ok(()) => app.toast_manager.show("Wallpaper set successfully"),
+                    Err(e) => app
+                        .toast_manager
+                        .show(format!("Failed to set wallpaper: {e}")),
                 }
-            }
-        }
-        KeyCode::Char('W') if modifiers.contains(KeyModifiers::SHIFT) => {
-            match walltui::platform::stop_video_wallpaper() {
-                Ok(()) => app.toast_manager.show("Video wallpaper stopped"),
-                Err(e) => app.toast_manager.show(format!("Failed to stop video wallpaper: {e}")),
             }
         }
         _ => {}
@@ -415,13 +394,19 @@ async fn handle_resolution_select_event(app: &mut App, key: KeyCode) -> bool {
             }
         }
         KeyCode::Char('c') => {
-            if let Some(opt) = app.resolution_options.get_mut(app.resolution_selected_index) {
+            if let Some(opt) = app
+                .resolution_options
+                .get_mut(app.resolution_selected_index)
+            {
                 opt.cycle_crop_mode();
             }
         }
         KeyCode::Enter => {
             if let Some(wallpaper) = app.pending_download_wallpaper.clone() {
-                let resolution = app.resolution_options.get(app.resolution_selected_index).cloned();
+                let resolution = app
+                    .resolution_options
+                    .get(app.resolution_selected_index)
+                    .cloned();
                 let resolution = match resolution {
                     Some(ResolutionOption::Original) => None,
                     Some(opt) => Some(opt),
@@ -431,70 +416,6 @@ async fn handle_resolution_select_event(app: &mut App, key: KeyCode) -> bool {
                 app.pending_download_wallpaper = None;
                 app.navigate_to(Screen::Download);
             }
-        }
-        _ => {}
-    }
-    true
-}
-
-async fn handle_ytdlp_input_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> bool {
-    if key == KeyCode::Char('v') && modifiers.contains(KeyModifiers::CONTROL) {
-        if let Some(text) = paste_from_clipboard().await {
-            app.ytdlp_url = text.clone();
-            app.ytdlp_cursor_pos = text.len();
-        }
-        return true;
-    }
-
-    match key {
-        KeyCode::Esc => {
-            app.reset_ytdlp();
-            app.go_back();
-        }
-        KeyCode::Enter => {
-            app.fetch_ytdlp_metadata().await;
-        }
-        KeyCode::Backspace => {
-            app.handle_ytdlp_backspace();
-        }
-        KeyCode::Left => {
-            app.handle_ytdlp_left();
-        }
-        KeyCode::Right => {
-            app.handle_ytdlp_right();
-        }
-        KeyCode::Char(c) => {
-            app.handle_ytdlp_input(c);
-        }
-        _ => {}
-    }
-    true
-}
-
-async fn handle_ytdlp_preview_event(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> bool {
-    match key {
-        KeyCode::Esc => {
-            app.reset_ytdlp();
-            app.go_back();
-        }
-        KeyCode::Char('d') => {
-            app.download_ytdlp_clip().await;
-        }
-        KeyCode::Char('x') => {
-            app.ytdlp_downloading = false;
-            app.ytdlp_progress_rx = None;
-        }
-        KeyCode::Left => {
-            app.adjust_clip_start(-1);
-        }
-        KeyCode::Right => {
-            app.adjust_clip_start(1);
-        }
-        KeyCode::Char('L') if modifiers.contains(KeyModifiers::SHIFT) => {
-            app.adjust_clip_end(-1);
-        }
-        KeyCode::Char('R') if modifiers.contains(KeyModifiers::SHIFT) => {
-            app.adjust_clip_end(1);
         }
         _ => {}
     }

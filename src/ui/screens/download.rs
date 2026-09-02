@@ -62,7 +62,7 @@ impl<'a> DownloadScreen<'a> {
                     };
                     let res_str = match &task.resolution {
                         Some(ResolutionOption::Original) => String::new(),
-                        Some(opt) => format!(" [{}]", opt.dimensions().0) ,
+                        Some(opt) => format!(" [{}]", opt.dimensions().0),
                         None => String::new(),
                     };
                     let line = Line::from(vec![

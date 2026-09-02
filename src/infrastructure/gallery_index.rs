@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::core::models::{GalleryEntry, Wallpaper};
+use crate::infrastructure::config_loader::data_path;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GalleryIndex {
@@ -20,46 +21,24 @@ fn now_ts() -> u64 {
 }
 
 impl GalleryIndex {
-    pub fn index_path() -> PathBuf {
-        let data_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
-        data_dir.join("walltui").join("gallery.json")
-    }
-
     pub fn load() -> Self {
-        let path = Self::index_path();
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(index) = serde_json::from_str(&content) {
-                    return index;
-                }
-            }
+        let path = data_path();
+        if path.exists()
+            && let Ok(content) = std::fs::read_to_string(&path)
+            && let Ok(index) = serde_json::from_str(&content)
+        {
+            return index;
         }
         Self::default()
     }
 
     pub fn save(&self) -> std::io::Result<()> {
-        let path = Self::index_path();
+        let path = data_path();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let content = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         std::fs::write(&path, content)
-    }
-
-    pub fn entry_for(&self, filename: &str) -> Option<&GalleryEntry> {
-        self.entries.get(filename)
-    }
-
-    pub fn ensure_entry(&mut self, wallpaper: Wallpaper) -> &mut GalleryEntry {
-        let key = wallpaper.id.clone();
-        self.entries.entry(key).or_insert_with(|| GalleryEntry {
-            wallpaper,
-            custom_name: None,
-            tags: Vec::new(),
-            favorite: false,
-            date_added: now_ts(),
-            date_modified: now_ts(),
-        })
     }
 
     pub fn rename(
@@ -83,7 +62,8 @@ impl GalleryIndex {
     }
 
     pub fn display_name(&self, wallpaper: &Wallpaper) -> String {
-        self.entry_for(&wallpaper.id)
+        self.entries
+            .get(&wallpaper.id)
             .map(|e| e.display_name().to_string())
             .unwrap_or_else(|| wallpaper.title.clone())
     }

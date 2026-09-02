@@ -43,7 +43,10 @@ impl ConfigField {
     pub fn is_editable(&self) -> bool {
         matches!(
             self,
-            ConfigField::ApiKey | ConfigField::DownloadDir | ConfigField::ThemeName | ConfigField::CursorStyle
+            ConfigField::ApiKey
+                | ConfigField::DownloadDir
+                | ConfigField::ThemeName
+                | ConfigField::CursorStyle
         )
     }
 }
@@ -61,6 +64,7 @@ pub struct ConfigScreen<'a> {
 }
 
 impl<'a> ConfigScreen<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         theme: &'a Theme,
         config: &'a AppConfig,
@@ -115,11 +119,7 @@ impl<'a> ConfigScreen<'a> {
         let help = if self.editing {
             vec![("Enter", "Confirm"), ("Esc", "Cancel"), ("Ctrl+S", "Save")]
         } else {
-            vec![
-                ("Enter", "Toggle"),
-                ("↑/↓", "Navigate"),
-                ("Esc", "Back"),
-            ]
+            vec![("Enter", "Toggle"), ("↑/↓", "Navigate"), ("Esc", "Back")]
         };
         HelpBar::new(&help, self.theme).render(frame, chunks[1]);
     }
@@ -135,7 +135,12 @@ impl<'a> ConfigScreen<'a> {
             self.purity_line(
                 "NSFW",
                 self.config.purity_nsfw,
-                self.config.purity_nsfw && self.config.wallhaven_api_key.as_ref().map_or(true, |k| k.is_empty()),
+                self.config.purity_nsfw
+                    && self
+                        .config
+                        .wallhaven_api_key
+                        .as_ref()
+                        .is_none_or(|k| k.is_empty()),
             ),
             self.category_line("General", self.config.category_general),
             self.category_line("Anime", self.config.category_anime),

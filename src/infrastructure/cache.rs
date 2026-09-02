@@ -22,14 +22,18 @@ impl<K: Eq + Hash, V> TtlCache<K, V> {
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        self.entries.insert(key, CacheEntry {
-            value,
-            expires_at: Instant::now() + self.ttl,
-        });
+        self.entries.insert(
+            key,
+            CacheEntry {
+                value,
+                expires_at: Instant::now() + self.ttl,
+            },
+        );
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.entries.get(key)
+        self.entries
+            .get(key)
             .filter(|entry| entry.expires_at > Instant::now())
             .map(|entry| &entry.value)
     }
@@ -43,7 +47,8 @@ impl<K: Eq + Hash, V> TtlCache<K, V> {
     }
 
     pub fn len(&self) -> usize {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|(_, e)| e.expires_at > Instant::now())
             .count()
     }
