@@ -28,17 +28,28 @@
 
 ## Install
 
-### WinGet
-
-```powershell
-winget install WallTUI.WallTUI
-```
-
 ### MSI / Portable
 
 Download the latest release from [GitHub Releases](https://github.com/iztlinxy/walltui/releases/latest).
 
+- **MSI**: run the installer. It adds `walltui` to your PATH automatically.
+- **ZIP**: extract it and add the folder containing `walltui.exe` to your PATH.
+
+Then open a terminal and run:
+
+```bash
+walltui
+```
+
 ### From source
+
+```bash
+cargo install --git https://github.com/iztlinxy/walltui
+```
+
+Make sure `%USERPROFILE%\.cargo\bin` is in your PATH. After that, run `walltui` from any terminal.
+
+Or build locally:
 
 ```bash
 cargo build --release

@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify tag matches Cargo.toml version
+        run: |
+          $version = (Get-Content Cargo.toml | Select-String '^version\s*=').Line.Split('"')[1]
+          $tag = "${{ github.ref_name }}" -replace '^v',''
+          if ($version -ne $tag) { throw "Tag v$tag does not match Cargo.toml version $version" }
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
