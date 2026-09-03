@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    layout::{Alignment, Constraint, Direction, Layout, Rect, Size},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
 };
@@ -161,14 +161,43 @@ impl<'a> ImageList<'a> {
     }
 
     fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .title(" Preview ")
+            .borders(Borders::ALL)
+            .border_style(self.theme.resolve(StyleKey::BorderFocused));
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(4)])
-            .split(area);
+            .constraints([Constraint::Min(0), Constraint::Length(6)])
+            .split(inner);
 
-        self.render_image(frame, chunks[0]);
+        let image_area = chunks[0];
+        let fit_size = self
+            .thumbnail_image
+            .as_ref()
+            .and_then(|i| i.size_for(Resize::Fit(None), Size::new(image_area.width, image_area.height)));
+        if let Some(image) = self.thumbnail_image.as_mut() {
+            let render_area = fit_size
+                .map(|s| center_rect(image_area, s.width, s.height))
+                .unwrap_or(image_area);
+            frame.render_stateful_widget(
+                StatefulImage::default().resize(Resize::Fit(None)),
+                render_area,
+                image,
+            );
+        } else {
+            let loading = Paragraph::new(
+                Line::from(Span::styled(
+                    "Loading...",
+                    Style::default().fg(self.theme.fg_secondary),
+                ))
+                .alignment(Alignment::Center),
+            );
+            frame.render_widget(loading, chunks[0]);
+        }
 
-        // Info panel below thumbnail.
         if let Some(w) = self.wallpapers.get(self.selected) {
             let dims = match (w.width, w.height) {
                 (Some(wi), Some(hi)) => format!("{wi}x{hi}"),
@@ -178,7 +207,24 @@ impl<'a> ImageList<'a> {
             let tags = if w.tags.is_empty() {
                 "-".to_string()
             } else {
-                w.tags.join("  ")
+                w.tags.iter().map(|t| format!("[{t}]")).collect::<Vec<_>>().join(" ")
+            };
+
+            let color_spans = if w.colors.is_empty() {
+                vec![Span::styled("-", Style::default().fg(self.theme.fg_secondary))]
+            } else {
+                let mut spans = Vec::new();
+                for c in w.colors.iter().take(5) {
+                    if let Some(color) = parse_hex_color(c) {
+                        spans.push(Span::raw("["));
+                        spans.push(Span::styled("██", Style::default().fg(color)));
+                        spans.push(Span::raw("] "));
+                    }
+                }
+                if spans.is_empty() {
+                    spans.push(Span::styled("-", Style::default().fg(self.theme.fg_secondary)));
+                }
+                spans
             };
 
             let lines = vec![
@@ -193,17 +239,14 @@ impl<'a> ImageList<'a> {
                     Span::styled("Size: ", self.theme.resolve(StyleKey::Title)),
                     Span::raw(size),
                 ]),
-                Line::from(vec![
-                    Span::styled("Tags: ", self.theme.resolve(StyleKey::Title)),
-                    Span::styled(tags, Style::default().fg(self.theme.fg_secondary)),
-                ]),
+                Line::from(Span::styled(
+                    tags,
+                    Style::default().fg(self.theme.fg_secondary),
+                )),
+                Line::from(color_spans),
             ];
 
-            let info = Paragraph::new(lines).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
-            );
+            let info = Paragraph::new(lines).alignment(Alignment::Center);
             frame.render_widget(info, chunks[1]);
         }
     }
@@ -229,4 +272,23 @@ fn format_size(bytes: u64) -> String {
     } else {
         format!("{bytes} B")
     }
+}
+
+fn parse_hex_color(s: &str) -> Option<Color> {
+    let s = s.trim_start_matches('#');
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some(Color::Rgb(r, g, b))
+}
+
+fn center_rect(area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect::new(x, y, width, height)
 }
