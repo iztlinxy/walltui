@@ -16,6 +16,7 @@ pub struct ImageList<'a> {
     thumbnail_image: &'a mut Option<ThreadProtocol>,
     theme: &'a Theme,
     fullscreen: bool,
+    show_favorites: bool,
 }
 
 impl<'a> ImageList<'a> {
@@ -31,11 +32,17 @@ impl<'a> ImageList<'a> {
             thumbnail_image,
             theme,
             fullscreen: false,
+            show_favorites: true,
         }
     }
 
     pub fn fullscreen(mut self, fullscreen: bool) -> Self {
         self.fullscreen = fullscreen;
+        self
+    }
+
+    pub fn show_favorites(mut self, show: bool) -> Self {
+        self.show_favorites = show;
         self
     }
 
@@ -79,7 +86,12 @@ impl<'a> ImageList<'a> {
     }
 
     fn render_table(&self, frame: &mut Frame, area: Rect) {
-        let header_cells = ["ID / TITLE", "RES", "RATIO", "FAV"].iter().map(|h| {
+        let headers: Vec<&str> = if self.show_favorites {
+            vec!["ID / TITLE", "RES", "RATIO", "FAV"]
+        } else {
+            vec!["ID / TITLE", "RES", "RATIO"]
+        };
+        let header_cells = headers.iter().map(|h| {
             Cell::from(Span::styled(
                 *h,
                 Style::default()
@@ -97,23 +109,36 @@ impl<'a> ImageList<'a> {
                 _ => "?".to_string(),
             };
             let ratio = w.ratio.as_deref().unwrap_or("-");
-            let fav = format!("★ {}", format_number(w.favorites.unwrap_or(0)));
             let id_title = format!("{}  {}", w.id, w.title);
-            Row::new(vec![
+            let mut cells = vec![
                 Cell::from(Span::raw(id_title)),
                 Cell::from(Span::styled(dims, Style::default().fg(self.theme.fg_secondary))),
                 Cell::from(Span::styled(ratio, Style::default().fg(self.theme.fg_secondary))),
-                Cell::from(Span::styled(fav, Style::default().fg(self.theme.secondary))),
-            ])
-            .height(1)
+            ];
+            if self.show_favorites {
+                let fav = format!("★ {}", format_number(w.favorites.unwrap_or(0)));
+                cells.push(Cell::from(Span::styled(
+                    fav,
+                    Style::default().fg(self.theme.secondary),
+                )));
+            }
+            Row::new(cells).height(1)
         });
 
-        let widths = [
-            Constraint::Percentage(45),
-            Constraint::Percentage(25),
-            Constraint::Percentage(15),
-            Constraint::Percentage(15),
-        ];
+        let widths = if self.show_favorites {
+            vec![
+                Constraint::Percentage(45),
+                Constraint::Percentage(25),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+            ]
+        } else {
+            vec![
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+            ]
+        };
 
         let mut state = TableState::default().with_selected(Some(self.selected));
         let table = Table::new(rows, widths)

@@ -106,6 +106,7 @@ impl<'a> GalleryScreen<'a> {
                 self.thumbnail_image,
                 self.theme,
             )
+            .show_favorites(false)
             .render(frame, chunks[1]);
         }
 
