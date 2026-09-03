@@ -2,29 +2,14 @@ use walltui::core::download::generate_filename;
 use walltui::core::models::{Orientation, Provider, SearchQuery, Wallpaper};
 use walltui::providers::create_provider;
 
+mod common;
+
 fn sample_wallpaper() -> Wallpaper {
-    Wallpaper {
-        id: "abc123".to_string(),
-        provider: Provider::Wallhaven,
-        url: "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg".to_string(),
-        thumb_url: "https://th.wallhaven.cc/small/ab/wallhaven-abc123.jpg".to_string(),
-        title: "Test Wallpaper".to_string(),
-        photographer: "Unknown".to_string(),
-        width: Some(1920),
-        height: Some(1080),
-        ratio: Some("16x9".to_string()),
-        file_size: Some(1_800_000),
-        avg_color: Some("#ff0000".to_string()),
-        colors: vec!["#ff0000".to_string()],
-        attribution: None,
-        file_type: Some("image/jpeg".to_string()),
-        web_url: Some("https://wallhaven.cc/w/abc123".to_string()),
-        tags: vec!["nature".to_string(), "landscape".to_string()],
-        category: Some("general".to_string()),
-        purity: Some("sfw".to_string()),
-        views: Some(1000),
-        favorites: Some(50),
-    }
+    let mut wp = common::sample_wallpaper("abc123");
+    wp.url = "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg".to_string();
+    wp.thumb_url = "https://th.wallhaven.cc/small/ab/wallhaven-abc123.jpg".to_string();
+    wp.web_url = Some("https://wallhaven.cc/w/abc123".to_string());
+    wp
 }
 
 // --- create_provider factory ---

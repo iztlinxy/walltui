@@ -8,33 +8,47 @@ struct CacheEntry<V> {
     expires_at: Instant,
 }
 
-pub struct TtlCache<K, V> {
+pub struct TtlCache<K, V, C = fn() -> Instant> {
     entries: HashMap<K, CacheEntry<V>>,
     ttl: Duration,
+    clock: C,
 }
 
 impl<K: Eq + Hash, V> TtlCache<K, V> {
     pub fn new(ttl: Duration) -> Self {
+        Self::with_clock(ttl, Instant::now)
+    }
+}
+
+impl<K: Eq + Hash, V, C: Fn() -> Instant> TtlCache<K, V, C> {
+    pub fn with_clock(ttl: Duration, clock: C) -> Self {
         Self {
             entries: HashMap::new(),
             ttl,
+            clock,
         }
     }
 
     pub fn insert(&mut self, key: K, value: V) {
+        let now = (self.clock)();
         self.entries.insert(
             key,
             CacheEntry {
                 value,
-                expires_at: Instant::now() + self.ttl,
+                expires_at: now + self.ttl,
             },
         );
     }
 
+    fn now(&self) -> Instant {
+        (self.clock)()
+    }
+
     pub fn get(&self, key: &K) -> Option<&V> {
+        let now = self.now();
         self.entries
             .get(key)
-            .filter(|entry| entry.expires_at > Instant::now())
+            .filter(|entry| entry.expires_at > now)
             .map(|entry| &entry.value)
     }
 
@@ -47,9 +61,10 @@ impl<K: Eq + Hash, V> TtlCache<K, V> {
     }
 
     pub fn len(&self) -> usize {
+        let now = self.now();
         self.entries
             .iter()
-            .filter(|(_, e)| e.expires_at > Instant::now())
+            .filter(|(_, e)| e.expires_at > now)
             .count()
     }
 
@@ -62,8 +77,9 @@ impl<K: Eq + Hash, V> TtlCache<K, V> {
     }
 
     pub fn purge_expired(&mut self) -> usize {
+        let now = self.now();
         let before = self.entries.len();
-        self.entries.retain(|_, e| e.expires_at > Instant::now());
+        self.entries.retain(|_, e| e.expires_at > now);
         before - self.entries.len()
     }
 }
