@@ -160,6 +160,7 @@ impl WallhavenWallpaper {
             },
             file_size: Some(self.file_size),
             avg_color: self.colors.first().cloned(),
+            colors: self.colors.clone(),
             attribution: None,
             file_type: if self.file_type.is_empty() {
                 None

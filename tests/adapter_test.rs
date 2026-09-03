@@ -15,6 +15,7 @@ fn sample_wallpaper() -> Wallpaper {
         ratio: Some("16x9".to_string()),
         file_size: Some(1_800_000),
         avg_color: Some("#ff0000".to_string()),
+        colors: vec!["#ff0000".to_string()],
         attribution: None,
         file_type: Some("image/jpeg".to_string()),
         web_url: Some("https://wallhaven.cc/w/abc123".to_string()),
@@ -410,6 +411,7 @@ mod wallhaven_test {
                 },
                 file_size: Some(self.file_size),
                 avg_color: self.colors.first().cloned(),
+                colors: self.colors.clone(),
                 attribution: None,
                 file_type: if self.file_type.is_empty() {
                     None

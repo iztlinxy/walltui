@@ -16,6 +16,8 @@ pub struct Wallpaper {
     pub ratio: Option<String>,
     pub file_size: Option<u64>,
     pub avg_color: Option<String>,
+    #[serde(default)]
+    pub colors: Vec<String>,
     pub attribution: Option<String>,
     pub file_type: Option<String>,
     pub web_url: Option<String>,
@@ -201,6 +203,7 @@ mod tests {
             ratio: Some("16x9".to_string()),
             file_size: Some(1_800_000),
             avg_color: Some("#ff0000".to_string()),
+            colors: vec!["#ff0000".to_string()],
             attribution: None,
             file_type: None,
             web_url: None,

@@ -954,6 +954,7 @@ fn scan_local_wallpapers(dir: &std::path::Path) -> Vec<Wallpaper> {
                 ratio,
                 file_size,
                 avg_color: None,
+                colors: Vec::new(),
                 attribution: None,
                 file_type: None,
                 web_url: None,

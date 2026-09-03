@@ -106,6 +106,7 @@ fn sample_wallpaper(id: &str) -> Wallpaper {
         ratio: Some("16x9".to_string()),
         file_size: Some(1_800_000),
         avg_color: None,
+        colors: Vec::new(),
         attribution: None,
         file_type: Some("image/jpeg".to_string()),
         web_url: None,
