@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use image::DynamicImage;
+use tracing::info_span;
 use ratatui::Frame;
 use ratatui_image::{
     picker::Picker,
@@ -299,6 +300,7 @@ impl App {
     }
 
     pub fn navigate_to(&mut self, screen: Screen) {
+        let _span = info_span!("navigate_to", ?screen).entered();
         self.previous_screen = Some(self.current_screen);
         self.current_screen = screen;
     }
@@ -423,6 +425,7 @@ impl App {
         }
     }
 
+    #[tracing::instrument(skip(self), fields(query = %self.search_query, page = self.search_page))]
     async fn execute_search_inner(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let config = AppConfig::load();
         let api_key = match self.active_provider {
@@ -495,6 +498,7 @@ impl App {
     }
 
     pub fn start_selected_download(&mut self) {
+        let _span = info_span!("start_selected_download", index = self.selected_index).entered();
         if let Some(wallpaper) = self.wallpapers.get(self.selected_index).cloned() {
             self.pending_download_wallpaper = Some(wallpaper);
             self.resolution_selected_index = 0;
@@ -503,6 +507,7 @@ impl App {
     }
 
     pub fn save_selected_original(&mut self) {
+        let _span = info_span!("save_selected_original", index = self.selected_index).entered();
         if let Some(wallpaper) = self.wallpapers.get(self.selected_index).cloned() {
             let title = wallpaper.title.clone();
             self.enqueue_download(&wallpaper, Some(ResolutionOption::Original));
@@ -515,6 +520,7 @@ impl App {
         wallpaper: &Wallpaper,
         resolution: Option<ResolutionOption>,
     ) {
+        let _span = info_span!("enqueue_download", wallpaper_id = %wallpaper.id).entered();
         let save_dir = self.download_dir.clone();
         let _ = std::fs::create_dir_all(&save_dir);
         let filename = generate_filename(wallpaper);
@@ -545,6 +551,7 @@ impl App {
     }
 
     pub fn load_gallery(&mut self) {
+        let _span = info_span!("load_gallery").entered();
         self.gallery_loading = true;
         self.gallery_wallpapers.clear();
         self.gallery_selected_index = 0;
@@ -805,6 +812,7 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
+        let _span = info_span!("draw", screen = ?self.current_screen).entered();
         let toast = self.toast_manager.message();
         let body_area = AppLayout::new(
             &self.theme,
