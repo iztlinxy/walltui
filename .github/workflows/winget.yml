@@ -14,5 +14,9 @@ jobs:
       - name: Submit to WinGet
         run: |
           $github = Get-Content '${{ github.event_path }}' | ConvertFrom-Json
-          $installerUrl = $github.release.assets | Where-Object { $_.name -match 'windows.msi' } | Select -ExpandProperty browser_download_url -First 1
-          .\wingetcreate.exe update WallTUI.WallTUI -s -v $github.release.tag_name -u $installerUrl -t ${{ secrets.WINGET_PAT }}
+          $asset = $github.release.assets | Where-Object { $_.name -match '\.msi$' } | Select-Object -First 1
+          if (-not $asset) { throw "No MSI asset found in release" }
+          $installerUrl = $asset.browser_download_url
+          $version = $github.release.tag_name -replace '^v',''
+          Write-Host "Submitting WallTUI $version from $installerUrl"
+          .\wingetcreate.exe update WallTUI.WallTUI -s -v $version -u $installerUrl -t ${{ secrets.WINGET_PAT }}
