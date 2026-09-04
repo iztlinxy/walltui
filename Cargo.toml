@@ -1,6 +1,7 @@
 [package]
 name = "walltui"
 version = "1.4.1"
+default-run = "walltui"
 description = "Terminal Wallpaper Manager"
 authors = ["WallTUI"]
 license = "MIT"
