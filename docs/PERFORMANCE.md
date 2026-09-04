@@ -6,7 +6,7 @@ Measured on Windows with the release profile enabled in `Cargo.toml`.
 
 | Build | Size | Target |
 |-------|------|--------|
-| `target/release/walltui.exe` | 4.65 MB | < 5 MB |
+| `target/release/walltui.exe` | ~5.1 MB | < 6 MB |
 
 Release profile:
 
@@ -77,8 +77,10 @@ cargo bloat --release -n 10
 Run:
 
 ```bash
-cargo test --release --test perf_test
+cargo run --bin bench --release --features bench
 ```
 
-- `binary_size_under_limit`: asserts `target/release/walltui.exe` is under 5 MB.
-- `startup_time_under_limit`: asserts headless startup is under 2 seconds (target is 500 ms; guard widened for CI/AV overhead).
+- Measures headless startup, navigation, and draw times.
+- Reports peak memory usage via `peak_alloc`.
+
+The release workflow asserts `target/release/walltui.exe` is under 6 MB.

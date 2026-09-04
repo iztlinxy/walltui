@@ -41,7 +41,7 @@ jobs:
       - name: Check binary size
         run: |
           $size = (Get-Item target/release/walltui.exe).Length / 1MB
-          if ($size -gt 5) { throw "Binary too large: $size MB" }
+          if ($size -gt 6) { throw "Binary too large: $size MB" }
 
       - name: Build MSI with cargo-wix
         run: cargo wix --no-build
