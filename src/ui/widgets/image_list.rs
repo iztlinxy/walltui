@@ -17,6 +17,7 @@ pub struct ImageList<'a> {
     theme: &'a Theme,
     fullscreen: bool,
     show_favorites: bool,
+    show_preview: bool,
 }
 
 impl<'a> ImageList<'a> {
@@ -33,6 +34,7 @@ impl<'a> ImageList<'a> {
             theme,
             fullscreen: false,
             show_favorites: true,
+            show_preview: true,
         }
     }
 
@@ -46,11 +48,21 @@ impl<'a> ImageList<'a> {
         self
     }
 
+    pub fn show_preview(mut self, show: bool) -> Self {
+        self.show_preview = show;
+        self
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         if self.fullscreen {
             self.render_image(frame, area);
             return;
         }
+        if !self.show_preview {
+            self.render_table(frame, area);
+            return;
+        }
+
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
