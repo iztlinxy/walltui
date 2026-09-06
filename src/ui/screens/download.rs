@@ -72,7 +72,7 @@ impl<'a> DownloadScreen<'a> {
             let (status_str, status_style) = match &task.status {
                 DownloadStatus::Queued => ("Queued".to_string(), self.theme.resolve(StyleKey::Secondary)),
                 DownloadStatus::Active => (
-                    format!("Downloading {}%", task.progress),
+                    format!("{} {}", mini_progress_bar(task.progress), task.progress),
                     self.theme.resolve(StyleKey::Primary),
                 ),
                 DownloadStatus::Completed => ("Completed".to_string(), self.theme.resolve(StyleKey::Success)),
@@ -83,19 +83,21 @@ impl<'a> DownloadScreen<'a> {
                 Some(opt) => opt.label().to_string(),
                 None => "Original".to_string(),
             };
+            let title = truncate(&task.wallpaper.title, 28);
+            let res = truncate(&res_str, 16);
             Row::new(vec![
                 Cell::from(Span::styled(status_str, status_style)),
-                Cell::from(Span::raw(&task.wallpaper.title)),
-                Cell::from(Span::styled(res_str, Style::default().fg(self.theme.fg_secondary))),
+                Cell::from(Span::raw(title)),
+                Cell::from(Span::styled(res, Style::default().fg(self.theme.fg_secondary))),
             ])
             .height(1)
         });
 
         let mut state = TableState::default().with_selected(Some(self.selected));
         let table = Table::new(rows, [
-            Constraint::Percentage(40),
-            Constraint::Percentage(40),
-            Constraint::Percentage(20),
+            Constraint::Length(14),
+            Constraint::Percentage(55),
+            Constraint::Percentage(30),
         ])
         .header(header)
         .block(
@@ -116,11 +118,6 @@ impl<'a> DownloadScreen<'a> {
     }
 
     fn render_preview(&self, frame: &mut Frame, area: Rect) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(7)])
-            .split(area);
-
         let task = self.tasks.get(self.selected);
         let status_label = match task {
             Some(t) => match &t.status {
@@ -132,28 +129,20 @@ impl<'a> DownloadScreen<'a> {
             None => "No selection",
         };
 
-        let progress = task.map(|t| t.progress).unwrap_or(0);
-        let bar = progress_bar(progress, area.width.saturating_sub(4) as usize);
-        let progress_text = format!("{}%", progress);
         let bytes_text = task
             .map(|t| format_bytes_progress(t.downloaded_bytes, t.total_bytes))
             .unwrap_or_default();
 
-        let preview_lines = vec![
+        let mut preview_lines = vec![
             Line::from(Span::styled(status_label, self.theme.resolve(StyleKey::Title)))
                 .alignment(Alignment::Center),
-            Line::from(Span::raw("")),
-            Line::from(vec![
-                Span::styled("[", Style::default().fg(self.theme.fg_secondary)),
-                Span::styled(bar, self.theme.resolve(StyleKey::Primary)),
-                Span::styled("]", Style::default().fg(self.theme.fg_secondary)),
-            ])
-            .alignment(Alignment::Center),
-            Line::from(Span::styled(progress_text, self.theme.resolve(StyleKey::Primary)))
-                .alignment(Alignment::Center),
-            Line::from(Span::styled(bytes_text, Style::default().fg(self.theme.fg_secondary)))
-                .alignment(Alignment::Center),
         ];
+        if !bytes_text.is_empty() {
+            preview_lines.push(Line::from(Span::styled(
+                bytes_text,
+                Style::default().fg(self.theme.fg_secondary),
+            )));
+        }
 
         let preview = Paragraph::new(preview_lines)
             .block(
@@ -163,7 +152,7 @@ impl<'a> DownloadScreen<'a> {
                     .border_style(self.theme.resolve(StyleKey::BorderFocused)),
             )
             .alignment(Alignment::Center);
-        frame.render_widget(preview, chunks[0]);
+        frame.render_widget(preview, area);
 
         if let Some(task) = task {
             let w = &task.wallpaper;
@@ -211,12 +200,19 @@ impl<'a> DownloadScreen<'a> {
                 ]),
             ];
 
+            let info_height = lines.len() as u16 + 2;
+            let info_area = Rect {
+                x: area.x,
+                y: area.y + area.height.saturating_sub(info_height),
+                width: area.width,
+                height: info_height.min(area.height),
+            };
             let info = Paragraph::new(lines).block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_style(self.theme.resolve(StyleKey::BorderFocused)),
             );
-            frame.render_widget(info, chunks[1]);
+            frame.render_widget(info, info_area);
         }
     }
 
@@ -271,11 +267,19 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-fn progress_bar(progress: u8, width: usize) -> String {
-    let width = width.max(1);
+fn mini_progress_bar(progress: u8) -> String {
+    let width = 8;
     let filled = ((progress as usize * width) / 100).min(width);
     let empty = width - filled;
     format!("{}{}", "█".repeat(filled), "░".repeat(empty))
+}
+
+fn truncate(text: &str, max_len: usize) -> String {
+    if text.chars().count() <= max_len {
+        text.to_string()
+    } else {
+        format!("{}...", text.chars().take(max_len.saturating_sub(3)).collect::<String>())
+    }
 }
 
 fn format_bytes_progress(downloaded: u64, total: u64) -> String {
