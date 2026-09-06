@@ -1,6 +1,6 @@
 [package]
 name = "walltui"
-version = "1.4.1"
+version = "1.4.2"
 default-run = "walltui"
 description = "Terminal Wallpaper Manager"
 authors = ["WallTUI"]
