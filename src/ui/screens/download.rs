@@ -43,13 +43,7 @@ impl<'a> DownloadScreen<'a> {
             );
             frame.render_widget(empty, chunks[0]);
         } else {
-            let body = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .split(chunks[0]);
-
-            self.render_table(frame, body[0]);
-            self.render_preview(frame, body[1]);
+            self.render_table(frame, chunks[0]);
         }
 
         self.render_footer(frame, chunks[1]);
@@ -117,105 +111,6 @@ impl<'a> DownloadScreen<'a> {
         frame.render_stateful_widget(table, area, &mut state);
     }
 
-    fn render_preview(&self, frame: &mut Frame, area: Rect) {
-        let task = self.tasks.get(self.selected);
-        let status_label = match task {
-            Some(t) => match &t.status {
-                DownloadStatus::Queued => "Queued",
-                DownloadStatus::Active => "Downloading",
-                DownloadStatus::Completed => "Completed",
-                DownloadStatus::Failed(_) => "Failed",
-            },
-            None => "No selection",
-        };
-
-        let bytes_text = task
-            .map(|t| format_bytes_progress(t.downloaded_bytes, t.total_bytes))
-            .unwrap_or_default();
-
-        let mut preview_lines = vec![
-            Line::from(Span::styled(status_label, self.theme.resolve(StyleKey::Title)))
-                .alignment(Alignment::Center),
-        ];
-        if !bytes_text.is_empty() {
-            preview_lines.push(Line::from(Span::styled(
-                bytes_text,
-                Style::default().fg(self.theme.fg_secondary),
-            )));
-        }
-
-        let preview = Paragraph::new(preview_lines)
-            .block(
-                Block::default()
-                    .title(" Preview ")
-                    .borders(Borders::ALL)
-                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
-            )
-            .alignment(Alignment::Center);
-        frame.render_widget(preview, area);
-
-        if let Some(task) = task {
-            let w = &task.wallpaper;
-            let dims = match (w.width, w.height) {
-                (Some(wi), Some(hi)) => format!("{wi}x{hi}"),
-                _ => "Unknown".to_string(),
-            };
-            let size = format_size(w.file_size.unwrap_or(0));
-            let status = match &task.status {
-                DownloadStatus::Queued => "Queued".to_string(),
-                DownloadStatus::Active => format!("{}%", task.progress),
-                DownloadStatus::Completed => "Completed".to_string(),
-                DownloadStatus::Failed(e) => format!("Failed: {e}"),
-            };
-            let tags = if w.tags.is_empty() {
-                "-".to_string()
-            } else {
-                w.tags.join("  ")
-            };
-            let path = task.save_path.to_string_lossy().to_string();
-
-            let lines = vec![
-                Line::from(vec![
-                    Span::styled("Title: ", self.theme.resolve(StyleKey::Title)),
-                    Span::raw(&w.title),
-                ]),
-                Line::from(vec![
-                    Span::styled("Res: ", self.theme.resolve(StyleKey::Title)),
-                    Span::raw(dims),
-                    Span::raw(" | "),
-                    Span::styled("Size: ", self.theme.resolve(StyleKey::Title)),
-                    Span::raw(size),
-                ]),
-                Line::from(vec![
-                    Span::styled("Status: ", self.theme.resolve(StyleKey::Title)),
-                    Span::raw(status),
-                ]),
-                Line::from(vec![
-                    Span::styled("Tags: ", self.theme.resolve(StyleKey::Title)),
-                    Span::styled(tags, Style::default().fg(self.theme.fg_secondary)),
-                ]),
-                Line::from(vec![
-                    Span::styled("Saved: ", self.theme.resolve(StyleKey::Title)),
-                    Span::styled(path, Style::default().fg(self.theme.fg_secondary)),
-                ]),
-            ];
-
-            let info_height = lines.len() as u16 + 2;
-            let info_area = Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(info_height),
-                width: area.width,
-                height: info_height.min(area.height),
-            };
-            let info = Paragraph::new(lines).block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
-            );
-            frame.render_widget(info, info_area);
-        }
-    }
-
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         let items = [
             ("x", "Cancel"),
@@ -255,18 +150,6 @@ impl<'a> DownloadScreen<'a> {
     }
 }
 
-fn format_size(bytes: u64) -> String {
-    if bytes == 0 {
-        "-".to_string()
-    } else if bytes >= 1_000_000 {
-        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
-    } else if bytes >= 1_000 {
-        format!("{:.1} KB", bytes as f64 / 1_000.0)
-    } else {
-        format!("{bytes} B")
-    }
-}
-
 fn mini_progress_bar(progress: u8) -> String {
     let width = 8;
     let filled = ((progress as usize * width) / 100).min(width);
@@ -279,30 +162,5 @@ fn truncate(text: &str, max_len: usize) -> String {
         text.to_string()
     } else {
         format!("{}...", text.chars().take(max_len.saturating_sub(3)).collect::<String>())
-    }
-}
-
-fn format_bytes_progress(downloaded: u64, total: u64) -> String {
-    if total == 0 {
-        format!("{} downloaded", human_bytes(downloaded))
-    } else {
-        format!(
-            "{} / {} ({:.0}%)",
-            human_bytes(downloaded),
-            human_bytes(total),
-            (downloaded as f64 / total as f64) * 100.0
-        )
-    }
-}
-
-fn human_bytes(bytes: u64) -> String {
-    if bytes >= 1_000_000_000 {
-        format!("{:.2} GB", bytes as f64 / 1_000_000_000.0)
-    } else if bytes >= 1_000_000 {
-        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
-    } else if bytes >= 1_000 {
-        format!("{:.1} KB", bytes as f64 / 1_000.0)
-    } else {
-        format!("{bytes} B")
     }
 }
