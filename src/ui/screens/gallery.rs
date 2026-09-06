@@ -136,7 +136,7 @@ impl<'a> GalleryScreen<'a> {
                     Span::raw(format!(" {desc}")),
                 ];
                 if i < items.len() - 1 {
-                    parts.push(Span::raw("  "));
+                    parts.push(Span::raw(" ── "));
                 }
                 parts
             })
