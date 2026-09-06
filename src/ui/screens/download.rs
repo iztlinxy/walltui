@@ -118,36 +118,53 @@ impl<'a> DownloadScreen<'a> {
     fn render_preview(&self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(5)])
+            .constraints([Constraint::Min(0), Constraint::Length(7)])
             .split(area);
 
-        // Placeholder for the image preview.
         let task = self.tasks.get(self.selected);
-        let placeholder_text = match task {
+        let status_label = match task {
             Some(t) => match &t.status {
                 DownloadStatus::Queued => "Queued",
-                DownloadStatus::Active => &format!("Downloading {}%", t.progress),
-                DownloadStatus::Completed => "Download completed",
-                DownloadStatus::Failed(_) => "Download failed",
+                DownloadStatus::Active => "Downloading",
+                DownloadStatus::Completed => "Completed",
+                DownloadStatus::Failed(_) => "Failed",
             },
-            None => "No preview",
+            None => "No selection",
         };
-        let image_placeholder = Paragraph::new(vec![
-            Line::from(Span::styled(
-                placeholder_text,
-                Style::default().fg(self.theme.fg_secondary),
-            ))
-            .alignment(Alignment::Center),
-        ])
-        .block(
-            Block::default()
-                .title(" Preview ")
-                .borders(Borders::ALL)
-                .border_style(self.theme.resolve(StyleKey::BorderFocused)),
-        );
-        frame.render_widget(image_placeholder, chunks[0]);
 
-        // Info panel.
+        let progress = task.map(|t| t.progress).unwrap_or(0);
+        let bar = progress_bar(progress, area.width.saturating_sub(4) as usize);
+        let progress_text = format!("{}%", progress);
+        let bytes_text = task
+            .map(|t| format_bytes_progress(t.downloaded_bytes, t.total_bytes))
+            .unwrap_or_default();
+
+        let preview_lines = vec![
+            Line::from(Span::styled(status_label, self.theme.resolve(StyleKey::Title)))
+                .alignment(Alignment::Center),
+            Line::from(Span::raw("")),
+            Line::from(vec![
+                Span::styled("[", Style::default().fg(self.theme.fg_secondary)),
+                Span::styled(bar, self.theme.resolve(StyleKey::Primary)),
+                Span::styled("]", Style::default().fg(self.theme.fg_secondary)),
+            ])
+            .alignment(Alignment::Center),
+            Line::from(Span::styled(progress_text, self.theme.resolve(StyleKey::Primary)))
+                .alignment(Alignment::Center),
+            Line::from(Span::styled(bytes_text, Style::default().fg(self.theme.fg_secondary)))
+                .alignment(Alignment::Center),
+        ];
+
+        let preview = Paragraph::new(preview_lines)
+            .block(
+                Block::default()
+                    .title(" Preview ")
+                    .borders(Borders::ALL)
+                    .border_style(self.theme.resolve(StyleKey::BorderFocused)),
+            )
+            .alignment(Alignment::Center);
+        frame.render_widget(preview, chunks[0]);
+
         if let Some(task) = task {
             let w = &task.wallpaper;
             let dims = match (w.width, w.height) {
@@ -166,6 +183,7 @@ impl<'a> DownloadScreen<'a> {
             } else {
                 w.tags.join("  ")
             };
+            let path = task.save_path.to_string_lossy().to_string();
 
             let lines = vec![
                 Line::from(vec![
@@ -187,6 +205,10 @@ impl<'a> DownloadScreen<'a> {
                     Span::styled("Tags: ", self.theme.resolve(StyleKey::Title)),
                     Span::styled(tags, Style::default().fg(self.theme.fg_secondary)),
                 ]),
+                Line::from(vec![
+                    Span::styled("Saved: ", self.theme.resolve(StyleKey::Title)),
+                    Span::styled(path, Style::default().fg(self.theme.fg_secondary)),
+                ]),
             ];
 
             let info = Paragraph::new(lines).block(
@@ -199,10 +221,11 @@ impl<'a> DownloadScreen<'a> {
     }
 
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
-        let items = vec![
+        let items = [
             ("x", "Cancel"),
             ("r", "Retry"),
             ("c", "Clear"),
+            ("o", "Open folder"),
             ("Esc", "Back"),
         ];
         let spans: Vec<Span> = items
@@ -239,6 +262,38 @@ impl<'a> DownloadScreen<'a> {
 fn format_size(bytes: u64) -> String {
     if bytes == 0 {
         "-".to_string()
+    } else if bytes >= 1_000_000 {
+        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+    } else if bytes >= 1_000 {
+        format!("{:.1} KB", bytes as f64 / 1_000.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn progress_bar(progress: u8, width: usize) -> String {
+    let width = width.max(1);
+    let filled = ((progress as usize * width) / 100).min(width);
+    let empty = width - filled;
+    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
+}
+
+fn format_bytes_progress(downloaded: u64, total: u64) -> String {
+    if total == 0 {
+        format!("{} downloaded", human_bytes(downloaded))
+    } else {
+        format!(
+            "{} / {} ({:.0}%)",
+            human_bytes(downloaded),
+            human_bytes(total),
+            (downloaded as f64 / total as f64) * 100.0
+        )
+    }
+}
+
+fn human_bytes(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 {
+        format!("{:.2} GB", bytes as f64 / 1_000_000_000.0)
     } else if bytes >= 1_000_000 {
         format!("{:.1} MB", bytes as f64 / 1_000_000.0)
     } else if bytes >= 1_000 {

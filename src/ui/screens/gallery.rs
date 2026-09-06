@@ -114,9 +114,9 @@ impl<'a> GalleryScreen<'a> {
             vec![("Enter", "Confirm"), ("Esc", "Cancel")]
         } else {
             vec![
-                ("↑/↓", "Navigate"),
-                ("Enter", "Open"),
-                ("w", "Set wallpaper"),
+                ("↑/↓", "Select"),
+                ("Enter", "Apply Wallpaper"),
+                ("o", "Open Folder"),
                 ("r", "Rename"),
                 ("d", "Delete"),
                 ("Esc", "Back"),

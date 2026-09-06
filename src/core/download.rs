@@ -14,6 +14,8 @@ pub struct DownloadTask {
     pub save_path: PathBuf,
     pub cancel_flag: Arc<std::sync::atomic::AtomicBool>,
     pub resolution: Option<ResolutionOption>,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +35,8 @@ impl DownloadTask {
             save_path,
             cancel_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             resolution: None,
+            downloaded_bytes: 0,
+            total_bytes: 0,
         }
     }
 
@@ -84,6 +88,8 @@ impl DownloadManager {
         {
             task.status = DownloadStatus::Queued;
             task.progress = 0;
+            task.downloaded_bytes = 0;
+            task.total_bytes = 0;
             task.cancel_flag
                 .store(false, std::sync::atomic::Ordering::SeqCst);
         }
@@ -168,7 +174,7 @@ impl Default for DownloadManager {
 
 #[derive(Debug, Clone)]
 pub enum DownloadEvent {
-    Progress(usize, u8),
+    Progress(usize, u8, u64, u64),
     Completed(usize),
 }
 
@@ -234,20 +240,33 @@ async fn try_download(
     let mut stream = response.bytes_stream();
     use futures_util::StreamExt;
 
-    let mut buffer = Vec::new();
+    let mut buffer = if resolution.is_some() {
+        Some(Vec::new())
+    } else {
+        None
+    };
+
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
-        buffer.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
 
-        if let Some(progress) = downloaded
-            .checked_mul(100)
-            .and_then(|v| v.checked_div(total_size))
-        {
-            let _ = tx
-                .send(DownloadEvent::Progress(task_idx, progress as u8))
-                .await;
+        if let Some(buf) = buffer.as_mut() {
+            buf.extend_from_slice(&chunk);
+        } else {
+            file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         }
+
+        let progress = if total_size == 0 {
+            0
+        } else {
+            downloaded
+                .checked_mul(100)
+                .and_then(|v| v.checked_div(total_size))
+                .unwrap_or(0) as u8
+        };
+        let _ = tx
+            .send(DownloadEvent::Progress(task_idx, progress, downloaded, total_size))
+            .await;
 
         if cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             let _ = tokio::fs::remove_file(save_path).await;
@@ -256,6 +275,7 @@ async fn try_download(
     }
 
     if let Some(res_opt) = resolution {
+        let buffer = buffer.ok_or("Missing download buffer")?;
         let img = image::load_from_memory(&buffer).map_err(|e| e.to_string())?;
         let (target_w, target_h) = res_opt.dimensions();
         let processed = match res_opt.crop_mode() {
@@ -300,8 +320,6 @@ async fn try_download(
             }
         }
         file.write_all(&out_buf).await.map_err(|e| e.to_string())?;
-    } else {
-        file.write_all(&buffer).await.map_err(|e| e.to_string())?;
     }
 
     file.flush().await.map_err(|e| e.to_string())?;

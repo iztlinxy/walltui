@@ -241,6 +241,9 @@ async fn handle_download_event(app: &mut App, key: KeyCode) -> bool {
         KeyCode::Char('c') => {
             app.clear_completed_downloads().await;
         }
+        KeyCode::Char('o') => {
+            app.open_download_folder(app.selected_index);
+        }
         _ => {}
     }
     true
@@ -320,12 +323,8 @@ async fn handle_gallery_event(app: &mut App, key: KeyCode, _modifiers: KeyModifi
         KeyCode::Char('R') => app.load_gallery(),
         KeyCode::Char('r') => app.start_gallery_rename(),
         KeyCode::Char('d') => app.prompt_delete_gallery_selected(),
+        KeyCode::Char('o') => app.open_gallery_folder(app.gallery_selected_index),
         KeyCode::Enter => {
-            if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
-                let _ = open::that(&wallpaper.url);
-            }
-        }
-        KeyCode::Char('w') => {
             if let Some(wallpaper) = app.gallery_wallpapers.get(app.gallery_selected_index) {
                 let path = std::path::Path::new(&wallpaper.url);
                 match walltui::platform::set_wallpaper(path) {

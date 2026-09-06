@@ -173,9 +173,11 @@ impl App {
         while let Ok(event) = self.download_rx.try_recv() {
             dirty = true;
             match event {
-                DownloadEvent::Progress(idx, progress) => {
+                DownloadEvent::Progress(idx, progress, downloaded, total) => {
                     if let Some(task) = self.download_tasks.get_mut(idx) {
                         task.progress = progress;
+                        task.downloaded_bytes = downloaded;
+                        task.total_bytes = total;
                     }
                 }
                 DownloadEvent::Completed(idx) => {
@@ -548,6 +550,29 @@ impl App {
 
     pub async fn clear_completed_downloads(&mut self) {
         self.download_manager.remove_completed().await;
+    }
+
+    pub fn open_download_folder(&mut self, index: usize) {
+        let Some(task) = self.download_tasks.get(index) else {
+            return;
+        };
+        let folder = task.save_path.parent().unwrap_or(&self.download_dir);
+        if let Err(e) = open::that(folder) {
+            self.toast_manager
+                .show(format!("Failed to open folder: {e}"));
+        }
+    }
+
+    pub fn open_gallery_folder(&mut self, index: usize) {
+        let Some(wallpaper) = self.gallery_wallpapers.get(index) else {
+            return;
+        };
+        let path = std::path::Path::new(&wallpaper.url);
+        let folder = path.parent().unwrap_or(&self.download_dir);
+        if let Err(e) = open::that(folder) {
+            self.toast_manager
+                .show(format!("Failed to open folder: {e}"));
+        }
     }
 
     pub fn load_gallery(&mut self) {
